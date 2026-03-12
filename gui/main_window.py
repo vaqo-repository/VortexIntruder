@@ -165,6 +165,10 @@ class MainWindow(QMainWindow):
             )
             return
 
+        # Read and immediately reset resume index
+        start_idx = self.settings_tab.get_start_index()
+        self.settings_tab.set_resume_index(0)
+
         # Build attack config
         config = AttackConfig(
             raw_request=raw,
@@ -181,15 +185,11 @@ class MainWindow(QMainWindow):
             grep_extract_regex=self.settings_tab.get_grep_extract_regex(),
             verify_ssl=self.settings_tab.get_verify_ssl(),
             cookie_handling=self.settings_tab.get_cookie_handling(),
-            start_index=self.settings_tab.get_start_index(),
+            start_index=start_idx,
         )
 
         # Build payload iterator based on attack type
         attack_type = config.attack_type
-        start_idx = config.start_index
-
-        # Reset resume index so next attack starts fresh
-        self.settings_tab.set_resume_index(0)
 
         try:
             gen1 = self.payloads_tab.get_payload_generator(start_idx)
