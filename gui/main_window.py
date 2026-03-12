@@ -188,6 +188,9 @@ class MainWindow(QMainWindow):
         attack_type = config.attack_type
         start_idx = config.start_index
 
+        # Reset resume index so next attack starts fresh
+        self.settings_tab.set_resume_index(0)
+
         try:
             gen1 = self.payloads_tab.get_payload_generator(start_idx)
             est = self.payloads_tab.estimate_payload_count()

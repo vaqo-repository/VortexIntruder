@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSplitter,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -124,14 +125,20 @@ class ResultsTab(QWidget):
 
         splitter.addWidget(self.table)
 
-        # Response viewer
-        resp_group = QGroupBox("Response Body")
-        resp_layout = QVBoxLayout(resp_group)
+        # Request / Response viewer tabs
+        viewer_tabs = QTabWidget()
+
+        self.request_viewer = QPlainTextEdit()
+        self.request_viewer.setReadOnly(True)
+        self.request_viewer.setPlaceholderText("Select a row to view the request...")
+        viewer_tabs.addTab(self.request_viewer, "Request")
+
         self.response_viewer = QPlainTextEdit()
         self.response_viewer.setReadOnly(True)
-        self.response_viewer.setPlaceholderText("Select a row to view the response body...")
-        resp_layout.addWidget(self.response_viewer)
-        splitter.addWidget(resp_group)
+        self.response_viewer.setPlaceholderText("Select a row to view the response...")
+        viewer_tabs.addTab(self.response_viewer, "Response")
+
+        splitter.addWidget(viewer_tabs)
         splitter.setSizes([500, 200])
 
         layout.addWidget(splitter, 1)
@@ -204,6 +211,7 @@ class ResultsTab(QWidget):
         self._baseline_length = None
         self._baseline_status = None
         self.table.setRowCount(0)
+        self.request_viewer.clear()
         self.response_viewer.clear()
         self.progress_bar.setValue(0)
         self.rps_label.setText("RPS: 0")
@@ -271,11 +279,14 @@ class ResultsTab(QWidget):
     def _on_row_selected(self, row: int, *_) -> None:
         if 0 <= row < len(self._results):
             r = self._results[row]
-            text = ""
+            # Request tab
+            self.request_viewer.setPlainText(r.request_text)
+            # Response tab
+            resp = ""
             for k, v in r.response_headers.items():
-                text += f"{k}: {v}\n"
-            text += "\n" + r.response_body
-            self.response_viewer.setPlainText(text)
+                resp += f"{k}: {v}\n"
+            resp += "\n" + r.response_body
+            self.response_viewer.setPlainText(resp)
 
     # -- export --
 
