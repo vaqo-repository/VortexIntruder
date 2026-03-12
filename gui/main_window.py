@@ -280,9 +280,9 @@ class MainWindow(QMainWindow):
         self._status_bar.showMessage(
             f"Attack complete  |  Last index: {self._last_session_index}"
         )
-        self.settings_tab.set_resume_index(self._last_session_index)
         self.logger_tab.append_log(
-            f"[INFO] Attack finished. Resume index saved: {self._last_session_index}"
+            f"[INFO] Attack finished. Last index: {self._last_session_index} "
+            f"(set 'Start from index' manually to resume)"
         )
 
     def _on_session_index(self, idx: int) -> None:
