@@ -24,7 +24,6 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -186,28 +185,33 @@ class _MacroEditor(QWidget):
         name_row.addWidget(self.name_edit)
         layout.addLayout(name_row)
 
-        # -- Steps --
+        # -- Steps (list + stacked, no nested QTabWidget) --
         steps_group = QGroupBox("Steps")
-        steps_layout = QVBoxLayout(steps_group)
-        steps_layout.setContentsMargins(6, 6, 6, 6)
-        steps_layout.setSpacing(4)
+        steps_outer = QHBoxLayout(steps_group)
+        steps_outer.setContentsMargins(6, 6, 6, 6)
+        steps_outer.setSpacing(6)
 
-        steps_btn_row = QHBoxLayout()
-        steps_btn_row.addWidget(QLabel("Each step is an HTTP request executed in order:"))
-        steps_btn_row.addStretch()
+        # Left: step list + add/del buttons
+        step_left = QVBoxLayout()
+        step_left.setSpacing(4)
+        self.step_list = QListWidget()
+        self.step_list.setFixedWidth(90)
+        self.step_list.currentRowChanged.connect(self._on_step_selected)
+        step_left.addWidget(self.step_list)
+        step_btn_row = QHBoxLayout()
         self.add_step_btn = QPushButton("+ Step")
-        self.add_step_btn.setFixedWidth(70)
         self.add_step_btn.clicked.connect(self._add_step)
         self.del_step_btn = QPushButton("− Step")
-        self.del_step_btn.setFixedWidth(70)
         self.del_step_btn.clicked.connect(self._del_step)
-        steps_btn_row.addWidget(self.add_step_btn)
-        steps_btn_row.addWidget(self.del_step_btn)
-        steps_layout.addLayout(steps_btn_row)
+        step_btn_row.addWidget(self.add_step_btn)
+        step_btn_row.addWidget(self.del_step_btn)
+        step_left.addLayout(step_btn_row)
+        steps_outer.addLayout(step_left)
 
-        self.steps_tabs = QTabWidget()
-        self.steps_tabs.setTabsClosable(False)
-        steps_layout.addWidget(self.steps_tabs)
+        # Right: stacked step editors
+        self.step_stack = QStackedWidget()
+        steps_outer.addWidget(self.step_stack, 1)
+
         layout.addWidget(steps_group, 3)
 
         # -- Triggers --
@@ -250,24 +254,36 @@ class _MacroEditor(QWidget):
     # -- Step management --
 
     def _add_step(self) -> None:
-        idx = self.steps_tabs.count() + 1
+        idx = self.step_list.count() + 1
         w = _StepWidget()
-        self.steps_tabs.addTab(w, f"Step {idx}")
-        self.steps_tabs.setCurrentIndex(self.steps_tabs.count() - 1)
+        self.step_stack.addWidget(w)
+        self.step_list.addItem(f"Step {idx}")
+        self.step_list.setCurrentRow(self.step_list.count() - 1)
 
     def _del_step(self) -> None:
-        if self.steps_tabs.count() > 1:
-            self.steps_tabs.removeTab(self.steps_tabs.currentIndex())
-            # Rename remaining tabs
-            for i in range(self.steps_tabs.count()):
-                self.steps_tabs.setTabText(i, f"Step {i + 1}")
+        if self.step_list.count() <= 1:
+            return
+        row = self.step_list.currentRow()
+        if row < 0:
+            return
+        w = self.step_stack.widget(row)
+        self.step_stack.removeWidget(w)
+        w.deleteLater()
+        self.step_list.takeItem(row)
+        # Rename remaining items
+        for i in range(self.step_list.count()):
+            self.step_list.item(i).setText(f"Step {i + 1}")
+
+    def _on_step_selected(self, row: int) -> None:
+        if row >= 0:
+            self.step_stack.setCurrentIndex(row)
 
     # -- Serialise / deserialise --
 
     def get_data(self) -> dict:
         steps = []
-        for i in range(self.steps_tabs.count()):
-            w: _StepWidget = self.steps_tabs.widget(i)  # type: ignore
+        for i in range(self.step_stack.count()):
+            w: _StepWidget = self.step_stack.widget(i)  # type: ignore
             steps.append({
                 "raw_request": w.get_raw_request(),
                 "extractions": w.get_extractions(),
@@ -284,13 +300,19 @@ class _MacroEditor(QWidget):
         self.name_edit.setText(data.get("name", "Macro"))
 
         # Restore steps
-        while self.steps_tabs.count():
-            self.steps_tabs.removeTab(0)
-        for step_data in data.get("steps", [{"raw_request": "", "extractions": []}]):
+        while self.step_stack.count():
+            w = self.step_stack.widget(0)
+            self.step_stack.removeWidget(w)
+            w.deleteLater()
+        self.step_list.clear()
+        for i, step_data in enumerate(data.get("steps", [{"raw_request": "", "extractions": []}])):
             w = _StepWidget()
             w.set_raw_request(step_data.get("raw_request", ""))
             w.set_extractions(step_data.get("extractions", []))
-            self.steps_tabs.addTab(w, f"Step {self.steps_tabs.count() + 1}")
+            self.step_stack.addWidget(w)
+            self.step_list.addItem(f"Step {i + 1}")
+        if self.step_list.count():
+            self.step_list.setCurrentRow(0)
 
         self.run_before_check.setChecked(data.get("run_before", True))
 
