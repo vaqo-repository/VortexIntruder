@@ -50,7 +50,9 @@ class _StepWidget(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(6)
+        layout.setSpacing(0)
+
+        splitter = QSplitter(Qt.Orientation.Vertical)
 
         # -- Request editor --
         req_group = QGroupBox("HTTP Request")
@@ -66,7 +68,7 @@ class _StepWidget(QWidget):
             "Tip: use {{variable_name}} to inject values extracted in earlier steps."
         )
         req_layout.addWidget(self.request_edit)
-        layout.addWidget(req_group, 2)
+        splitter.addWidget(req_group)
 
         # -- Extractions --
         ext_group = QGroupBox("Extract Variables from Response")
@@ -75,9 +77,7 @@ class _StepWidget(QWidget):
         ext_layout.setSpacing(4)
 
         ext_header = QHBoxLayout()
-        ext_header.addWidget(QLabel(
-            "Extracted values are available as {{name}} in later steps and in the fuzz request."
-        ))
+        ext_header.addWidget(QLabel("Extracted values → available as {{name}} in later steps and in the fuzz request."))
         ext_header.addStretch()
         self.add_ext_btn = QPushButton("+ Add")
         self.add_ext_btn.setFixedWidth(60)
@@ -99,9 +99,12 @@ class _StepWidget(QWidget):
         hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.ext_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.ext_table.setMaximumHeight(160)
         ext_layout.addWidget(self.ext_table)
-        layout.addWidget(ext_group, 1)
+        splitter.addWidget(ext_group)
+
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 1)
+        layout.addWidget(splitter)
 
     # -- extraction table helpers --
 
@@ -185,36 +188,42 @@ class _MacroEditor(QWidget):
         name_row.addWidget(self.name_edit)
         layout.addLayout(name_row)
 
-        # -- Steps (list + stacked, no nested QTabWidget) --
+        # -- Main splitter: Steps (top) / Triggers (bottom) --
+        editor_splitter = QSplitter(Qt.Orientation.Vertical)
+
+        # Steps group
         steps_group = QGroupBox("Steps")
         steps_outer = QHBoxLayout(steps_group)
         steps_outer.setContentsMargins(6, 6, 6, 6)
         steps_outer.setSpacing(6)
 
         # Left: step list + add/del buttons
-        step_left = QVBoxLayout()
+        step_left_w = QWidget()
+        step_left_w.setFixedWidth(95)
+        step_left = QVBoxLayout(step_left_w)
+        step_left.setContentsMargins(0, 0, 0, 0)
         step_left.setSpacing(4)
         self.step_list = QListWidget()
-        self.step_list.setFixedWidth(90)
         self.step_list.currentRowChanged.connect(self._on_step_selected)
         step_left.addWidget(self.step_list)
         step_btn_row = QHBoxLayout()
-        self.add_step_btn = QPushButton("+ Step")
+        self.add_step_btn = QPushButton("+")
+        self.add_step_btn.setToolTip("Add step")
         self.add_step_btn.clicked.connect(self._add_step)
-        self.del_step_btn = QPushButton("− Step")
+        self.del_step_btn = QPushButton("−")
+        self.del_step_btn.setToolTip("Delete step")
         self.del_step_btn.clicked.connect(self._del_step)
         step_btn_row.addWidget(self.add_step_btn)
         step_btn_row.addWidget(self.del_step_btn)
         step_left.addLayout(step_btn_row)
-        steps_outer.addLayout(step_left)
+        steps_outer.addWidget(step_left_w)
 
         # Right: stacked step editors
         self.step_stack = QStackedWidget()
         steps_outer.addWidget(self.step_stack, 1)
+        editor_splitter.addWidget(steps_group)
 
-        layout.addWidget(steps_group, 3)
-
-        # -- Triggers --
+        # Triggers group
         trigger_group = QGroupBox("Triggers")
         trigger_layout = QVBoxLayout(trigger_group)
         trigger_layout.setContentsMargins(8, 8, 8, 8)
@@ -246,7 +255,12 @@ class _MacroEditor(QWidget):
         every_row.addWidget(QLabel("fuzz requests"))
         every_row.addStretch()
         trigger_layout.addLayout(every_row)
-        layout.addWidget(trigger_group)
+        trigger_layout.addStretch()
+        editor_splitter.addWidget(trigger_group)
+
+        editor_splitter.setStretchFactor(0, 4)
+        editor_splitter.setStretchFactor(1, 1)
+        layout.addWidget(editor_splitter, 1)
 
         # Start with one empty step
         self._add_step()
