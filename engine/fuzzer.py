@@ -32,6 +32,40 @@ from engine.processor import PayloadProcessor, TransportEncoder
 # Data classes for results
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Macro data classes
+# ---------------------------------------------------------------------------
+
+@dataclass
+class MacroExtraction:
+    """One extraction rule: pull a named value from a macro step's response."""
+    source: str = "cookie"    # "cookie" | "header" | "body_regex"
+    key: str = ""              # cookie name, header name, or regex pattern
+    variable: str = ""         # name used as {{variable}} in later requests
+    group: int = 1             # capture group index (body_regex only)
+
+
+@dataclass
+class MacroStep:
+    """One HTTP request step in a macro sequence."""
+    raw_request: str = ""
+    extractions: list[MacroExtraction] = field(default_factory=list)
+
+
+@dataclass
+class MacroConfig:
+    """A named macro: ordered steps + trigger rules."""
+    name: str = "Macro"
+    steps: list[MacroStep] = field(default_factory=list)
+    run_before: bool = True          # execute once before attack starts
+    rerun_on_response: str = ""      # re-run when fuzz response body contains this text
+    rerun_every: int = 0             # re-run every N fuzz requests (0 = disabled)
+
+
+# ---------------------------------------------------------------------------
+# Fuzz result / Attack config
+# ---------------------------------------------------------------------------
+
 @dataclass
 class FuzzResult:
     request_id: int = 0
@@ -74,6 +108,7 @@ class AttackConfig:
     interleave_follow_redirects: bool = True  # follow redirects for safe request
     auto_pause_errors: bool = False  # pause when N consecutive errors occur
     auto_pause_threshold: int = 5    # N consecutive errors before auto-pause
+    macros: list[MacroConfig] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +139,7 @@ class FuzzerEngine(QThread):
         self._pause_mutex = QMutex()
         self._pause_condition = QWaitCondition()
         self._paused = False
+        self._macro_vars: dict[str, str] = {}
 
     # -- control methods (called from GUI thread) --
 
@@ -167,7 +203,14 @@ class FuzzerEngine(QThread):
                 self.log_message.emit("[ERROR] No payload iterator configured.")
                 return
 
+            # -- Run pre-attack macros --
+            self._macro_vars = {}
+            for macro in self.config.macros:
+                if macro.run_before and macro.steps:
+                    await self._run_macro(macro, client)
+
             idx = 0
+            _macro_rerun_needed = False  # set when a response triggers macro rerun
             for pos_index, payload_list in self.payload_iterator:
                 if self._stop_flag:
                     break
@@ -180,12 +223,34 @@ class FuzzerEngine(QThread):
                     if self._stop_flag:
                         break
 
+                # -- Handle macro rerun triggered by previous response --
+                if _macro_rerun_needed:
+                    if tasks:
+                        remaining, _ = await asyncio.wait(tasks)
+                        for t in remaining:
+                            self.session_index.emit(idx)
+                        tasks.clear()
+                    for macro in self.config.macros:
+                        if macro.rerun_on_response:
+                            await self._run_macro(macro, client)
+                    _macro_rerun_needed = False
+
                 idx += 1
                 if idx <= self.config.start_index:
                     continue
 
                 request_counter += 1
                 rid = request_counter
+
+                # -- Macro rerun every N requests --
+                for macro in self.config.macros:
+                    if macro.rerun_every > 0 and request_counter % macro.rerun_every == 0:
+                        if tasks:
+                            remaining, _ = await asyncio.wait(tasks)
+                            for t in remaining:
+                                self.session_index.emit(idx)
+                            tasks.clear()
+                        await self._run_macro(macro, client)
 
                 # -- Delay + Jitter --
                 if self.config.delay_ms > 0 or self.config.jitter_ms > 0:
@@ -248,6 +313,13 @@ class FuzzerEngine(QThread):
                                 f"[WARN] Auto-paused after {self.config.auto_pause_threshold} "
                                 f"consecutive errors. Resume when ready."
                             )
+                        # Check macro rerun on response body match
+                        if result and result.response_body:
+                            for macro in self.config.macros:
+                                if (macro.rerun_on_response
+                                        and macro.rerun_on_response.lower()
+                                        in result.response_body.lower()):
+                                    _macro_rerun_needed = True
                         self.session_index.emit(idx)
                     tasks = list(pending)
 
@@ -270,6 +342,67 @@ class FuzzerEngine(QThread):
                 f"[DONE] {request_counter} requests in {elapsed:.2f}s "
                 f"({rps:.1f} req/s, {err_rate:.1f}% errors)"
             )
+
+    # -----------------------------------------------------------------------
+    # Macro helpers
+    # -----------------------------------------------------------------------
+
+    def _apply_macro_vars(self, text: str) -> str:
+        """Replace {{var_name}} placeholders with extracted macro values."""
+        for var, val in self._macro_vars.items():
+            text = text.replace(f"{{{{{var}}}}}", val)
+        return text
+
+    async def _run_macro(self, macro: MacroConfig, client: httpx.AsyncClient) -> None:
+        """Execute all steps of a macro and update self._macro_vars."""
+        self.log_message.emit(f"[MACRO] Running '{macro.name}'...")
+        for i, step in enumerate(macro.steps):
+            if not step.raw_request.strip():
+                continue
+            try:
+                raw = self._apply_macro_vars(step.raw_request)
+                parsed = parse_raw_request(raw, self.config.target_override)
+                if self.config.update_content_length:
+                    parsed.headers = update_content_length(parsed.headers, parsed.body)
+                response = await client.request(
+                    method=parsed.method,
+                    url=parsed.url,
+                    headers=parsed.headers,
+                    content=parsed.body.encode("utf-8") if parsed.body else None,
+                    follow_redirects=True,
+                )
+                self.log_message.emit(
+                    f"[MACRO] '{macro.name}' step {i + 1} → {response.status_code}"
+                )
+                for ext in step.extractions:
+                    if not ext.key or not ext.variable:
+                        continue
+                    value = ""
+                    if ext.source == "cookie":
+                        for sc in response.headers.get_list("set-cookie"):
+                            part = sc.split(";")[0].strip()
+                            if "=" in part:
+                                k, v = part.split("=", 1)
+                                if k.strip() == ext.key:
+                                    value = v.strip()
+                                    break
+                    elif ext.source == "header":
+                        value = response.headers.get(ext.key, "")
+                    elif ext.source == "body_regex":
+                        try:
+                            m = re.search(ext.key, response.text)
+                            if m:
+                                grp = ext.group if m.lastindex and ext.group <= m.lastindex else 0
+                                value = m.group(grp)
+                        except re.error:
+                            pass
+                    if value:
+                        self._macro_vars[ext.variable] = value
+                        self.log_message.emit(
+                            f"[MACRO] Extracted {{{{{ext.variable}}}}} = {value[:60]}"
+                        )
+            except Exception as exc:
+                self.log_message.emit(f"[MACRO] '{macro.name}' step {i + 1} failed: {exc}")
 
     async def _send_safe_request(
         self,
@@ -336,6 +469,10 @@ class FuzzerEngine(QThread):
                     raw_filled = substitute_payload(
                         self.config.raw_request, payloads, mode="pitchfork",
                     )
+
+                # Apply macro variables ({{var_name}} → extracted value)
+                if self._macro_vars:
+                    raw_filled = self._apply_macro_vars(raw_filled)
 
                 # Parse the filled request
                 parsed = parse_raw_request(raw_filled, self.config.target_override)

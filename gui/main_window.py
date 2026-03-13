@@ -34,6 +34,7 @@ from engine.payloads import (
 )
 from gui.diff_dialog import DiffDialog
 from gui.logger_tab import LoggerTab
+from gui.macros_tab import MacrosTab
 from gui.payloads_tab import PayloadsTab
 from gui.request_tab import RequestTab
 from gui.results_tab import ResultsTab
@@ -119,12 +120,14 @@ class MainWindow(QMainWindow):
         self.request_tab = RequestTab()
         self.payloads_tab = PayloadsTab()
         self.settings_tab = SettingsTab()
+        self.macros_tab = MacrosTab()
         self.results_tab = ResultsTab()
         self.logger_tab = LoggerTab()
 
         self.tabs.addTab(self.request_tab, "🎯 Target & Request")
         self.tabs.addTab(self.payloads_tab, "📦 Payloads")
         self.tabs.addTab(self.settings_tab, "⚙️ Settings")
+        self.tabs.addTab(self.macros_tab, "🔁 Macros")
         self.tabs.addTab(self.results_tab, "📊 Results")
         self.tabs.addTab(self.logger_tab, "📋 Logger")
 
@@ -194,6 +197,7 @@ class MainWindow(QMainWindow):
             interleave_every=self.settings_tab.get_interleave_every(),
             interleave_request=self.settings_tab.get_interleave_request(),
             interleave_follow_redirects=self.settings_tab.get_interleave_follow_redirects(),
+            macros=self.macros_tab.get_macro_configs(),
         )
 
         # Build payload iterator based on attack type

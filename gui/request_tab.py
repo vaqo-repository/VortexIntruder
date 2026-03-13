@@ -15,6 +15,7 @@ from PyQt6.QtGui import (
     QTextDocument,
 )
 from PyQt6.QtWidgets import (
+    QComboBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -129,6 +130,14 @@ class RequestTab(QWidget):
 
         # Button bar
         btn_bar = QHBoxLayout()
+
+        # Method selector
+        self.method_combo = QComboBox()
+        self.method_combo.addItems(["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE", "CONNECT"])
+        self.method_combo.setToolTip("Change HTTP method")
+        self.method_combo.setFixedWidth(100)
+        self.method_combo.currentTextChanged.connect(self._on_method_changed)
+
         self.add_marker_btn = QPushButton("Add §")
         self.add_marker_btn.setObjectName("markerButton")
         self.add_marker_btn.setToolTip("Wrap selected text with § markers (payload position)")
@@ -144,6 +153,7 @@ class RequestTab(QWidget):
         self.position_count_label = QLabel("Positions: 0")
         self.position_count_label.setObjectName("statsLabel")
 
+        btn_bar.addWidget(self.method_combo)
         btn_bar.addWidget(self.add_marker_btn)
         btn_bar.addWidget(self.clear_marker_btn)
         btn_bar.addWidget(self.auto_detect_btn)
@@ -166,9 +176,44 @@ class RequestTab(QWidget):
         self.editor.setTabStopDistance(32)
         self._highlighter = HttpHighlighter(self.editor.document())
         self.editor.textChanged.connect(self._update_position_count)
+        self.editor.textChanged.connect(self._sync_method_combo)
         editor_layout.addWidget(self.editor)
 
         layout.addWidget(editor_group, 1)
+
+    _METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE", "CONNECT")
+    _METHOD_RE = re.compile(
+        r"^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|TRACE|CONNECT)(\s+)",
+        re.IGNORECASE,
+    )
+
+    def _sync_method_combo(self) -> None:
+        """Update method combo to reflect first line of raw request (without triggering replace)."""
+        text = self.editor.toPlainText()
+        m = self._METHOD_RE.match(text)
+        if m:
+            method = m.group(1).upper()
+            if self.method_combo.currentText() != method:
+                self.method_combo.blockSignals(True)
+                idx = self.method_combo.findText(method)
+                if idx >= 0:
+                    self.method_combo.setCurrentIndex(idx)
+                self.method_combo.blockSignals(False)
+
+    def _on_method_changed(self, new_method: str) -> None:
+        """Replace the HTTP method in the first line of the raw request."""
+        text = self.editor.toPlainText()
+        new_text = self._METHOD_RE.sub(lambda m: new_method + m.group(2), text, count=1)
+        if new_text != text:
+            cursor_pos = self.editor.textCursor().position()
+            self.editor.blockSignals(True)
+            self.editor.setPlainText(new_text)
+            self.editor.blockSignals(False)
+            # Restore cursor roughly
+            cursor = self.editor.textCursor()
+            cursor.setPosition(min(cursor_pos, len(new_text)))
+            self.editor.setTextCursor(cursor)
+            self._update_position_count()
 
     def _add_marker(self) -> None:
         cursor = self.editor.textCursor()
