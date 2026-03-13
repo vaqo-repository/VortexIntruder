@@ -54,6 +54,13 @@ PAYLOAD_TYPES = [
 ]
 
 
+def _repeat_generator(gen: Iterator[str], count: int) -> Iterator[str]:
+    """Yield each item from gen repeated `count` times."""
+    for item in gen:
+        for _ in range(count):
+            yield item
+
+
 class DraggableListView(QListView):
     """QListView with drag-and-drop reordering support."""
 
@@ -307,6 +314,26 @@ class PayloadsTab(QWidget):
         filter_row.addWidget(self.filter_max)
         filter_row.addStretch()
         source_layout.addLayout(filter_row)
+
+        # -- Payload Options: repeat & order --
+        opts_group = QGroupBox("Payload Options")
+        opts_layout = QHBoxLayout(opts_group)
+
+        opts_layout.addWidget(QLabel("Repeat each payload:"))
+        self.repeat_count = QSpinBox()
+        self.repeat_count.setRange(1, 999999)
+        self.repeat_count.setValue(1)
+        self.repeat_count.setToolTip("How many times to send each payload")
+        opts_layout.addWidget(self.repeat_count)
+
+        opts_layout.addWidget(QLabel("  Order:"))
+        self.order_sequential_radio = QRadioButton("Sequential")
+        self.order_random_radio = QRadioButton("Random")
+        self.order_sequential_radio.setChecked(True)
+        opts_layout.addWidget(self.order_sequential_radio)
+        opts_layout.addWidget(self.order_random_radio)
+        opts_layout.addStretch()
+        source_layout.addWidget(opts_group)
 
         source_layout.addStretch()
         sub_tabs.addTab(source_widget, "Payload Source")
@@ -569,32 +596,45 @@ class PayloadsTab(QWidget):
             from engine.payloads import filter_by_length
             gen = filter_by_length(gen, self.filter_min.value(), self.filter_max.value())
 
+        # Apply repeat
+        repeat = self.repeat_count.value()
+        if repeat > 1:
+            gen = _repeat_generator(gen, repeat)
+
+        # Apply shuffle if random order selected
+        if self.order_random_radio.isChecked():
+            import random
+            items = list(gen)
+            random.shuffle(items)
+            gen = iter(items)
+
         return gen
 
     def estimate_payload_count(self) -> int:
         """Estimate total payload count for progress bar."""
         idx = self.type_combo.currentIndex()
         if idx == 0:
-            return len(self.manual_text.toPlainText().strip().split("\n"))
+            base = len(self.manual_text.toPlainText().strip().split("\n"))
         elif idx == 1:
             start = self.num_start.value()
             end = self.num_end.value()
             step = max(0.000001, self.num_step.value())
-            return max(0, int((end - start) / step) + 1)
+            base = max(0, int((end - start) / step) + 1)
         elif idx == 2:
             charset_len = len(self.brute_charset.text()) or 26
             mn, mx = self.brute_min.value(), self.brute_max.value()
-            total = sum(charset_len ** i for i in range(mn, mx + 1))
-            return total
+            base = sum(charset_len ** i for i in range(mn, mx + 1))
         elif idx == 3:
-            return self.null_count.value()
+            base = self.null_count.value()
         elif idx == 4:
-            # Estimate from file (count lines)
             if self._file_path:
                 try:
                     with open(self._file_path, "rb") as f:
-                        return sum(1 for _ in f)
+                        base = sum(1 for _ in f)
                 except OSError:
-                    return 0
-            return 0
-        return 0
+                    base = 0
+            else:
+                base = 0
+        else:
+            base = 0
+        return base * self.repeat_count.value()
