@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QSplitter,
     QStackedWidget,
@@ -48,7 +49,15 @@ class _StepWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        # Scroll area so nothing gets squished
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(6)
 
@@ -58,6 +67,7 @@ class _StepWidget(QWidget):
         req_layout.setContentsMargins(6, 6, 6, 6)
         self.request_edit = QPlainTextEdit()
         self.request_edit.setFont(QFont("Consolas", 11))
+        self.request_edit.setMinimumHeight(180)
         self.request_edit.setPlaceholderText(
             "POST /login HTTP/1.1\n"
             "Host: example.com\n"
@@ -66,11 +76,10 @@ class _StepWidget(QWidget):
             "Tip: use {{variable_name}} to inject values extracted in earlier steps."
         )
         req_layout.addWidget(self.request_edit)
-        layout.addWidget(req_group, 3)
+        layout.addWidget(req_group)
 
         # -- Extractions --
         ext_group = QGroupBox("Extract Variables from Response")
-        ext_group.setMinimumHeight(160)
         ext_layout = QVBoxLayout(ext_group)
         ext_layout.setContentsMargins(6, 6, 6, 6)
         ext_layout.setSpacing(4)
@@ -98,9 +107,13 @@ class _StepWidget(QWidget):
         hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.ext_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.ext_table.setMinimumHeight(80)
+        self.ext_table.setMinimumHeight(120)
         ext_layout.addWidget(self.ext_table)
-        layout.addWidget(ext_group, 2)
+        layout.addWidget(ext_group)
+
+        layout.addStretch()
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
 
     # -- extraction table helpers --
 
