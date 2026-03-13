@@ -177,6 +177,70 @@ class SettingsTab(QWidget):
         resume_layout.addStretch()
         layout.addWidget(resume_group)
 
+        # -- Throttling & Interleave --
+        throttle_group = QGroupBox("Throttling & Safe Request Interleave")
+        thr_layout = QVBoxLayout(throttle_group)
+        thr_layout.setContentsMargins(10, 8, 10, 8)
+        thr_layout.setSpacing(8)
+
+        # Delay row
+        delay_row = QHBoxLayout()
+        self.delay_check = QCheckBox("Delay between requests:")
+        delay_row.addWidget(self.delay_check)
+        self.delay_spin = QDoubleSpinBox()
+        self.delay_spin.setRange(0, 60000)
+        self.delay_spin.setValue(0)
+        self.delay_spin.setSuffix(" ms")
+        self.delay_spin.setDecimals(0)
+        self.delay_spin.setMinimumWidth(100)
+        delay_row.addWidget(self.delay_spin)
+        delay_row.addWidget(QLabel("  Jitter ±"))
+        self.jitter_spin = QDoubleSpinBox()
+        self.jitter_spin.setRange(0, 30000)
+        self.jitter_spin.setValue(0)
+        self.jitter_spin.setSuffix(" ms")
+        self.jitter_spin.setDecimals(0)
+        self.jitter_spin.setMinimumWidth(100)
+        delay_row.addWidget(self.jitter_spin)
+        delay_row.addStretch()
+        thr_layout.addLayout(delay_row)
+
+        # Auto-pause row
+        autopause_row = QHBoxLayout()
+        self.autopause_check = QCheckBox("Auto-pause after")
+        autopause_row.addWidget(self.autopause_check)
+        self.autopause_spin = QSpinBox()
+        self.autopause_spin.setRange(1, 9999)
+        self.autopause_spin.setValue(5)
+        autopause_row.addWidget(self.autopause_spin)
+        autopause_row.addWidget(QLabel("consecutive errors/non-2xx"))
+        autopause_row.addStretch()
+        thr_layout.addLayout(autopause_row)
+
+        # Interleave row
+        interleave_row = QHBoxLayout()
+        self.interleave_check = QCheckBox("Send safe request every")
+        interleave_row.addWidget(self.interleave_check)
+        self.interleave_every_spin = QSpinBox()
+        self.interleave_every_spin.setRange(1, 99999)
+        self.interleave_every_spin.setValue(3)
+        interleave_row.addWidget(self.interleave_every_spin)
+        interleave_row.addWidget(QLabel("fuzz requests"))
+        interleave_row.addStretch()
+        thr_layout.addLayout(interleave_row)
+
+        self.interleave_check.toggled.connect(self._on_interleave_toggled)
+        thr_layout.addWidget(QLabel("Safe Request (raw HTTP — sent as-is, no payload substitution):"))
+        self.interleave_request_edit = QPlainTextEdit()
+        self.interleave_request_edit.setMaximumHeight(130)
+        self.interleave_request_edit.setPlaceholderText(
+            "GET /home HTTP/1.1\r\nHost: example.com\r\nCookie: session=abc\r\n\r\n"
+        )
+        self.interleave_request_edit.setEnabled(False)
+        thr_layout.addWidget(self.interleave_request_edit)
+
+        layout.addWidget(throttle_group)
+
         layout.addStretch()
 
         scroll.setWidget(container)
@@ -184,6 +248,9 @@ class SettingsTab(QWidget):
 
     def _update_conc_label(self, val: int) -> None:
         self.conc_label.setText(str(val))
+
+    def _on_interleave_toggled(self, checked: bool) -> None:
+        self.interleave_request_edit.setEnabled(checked)
 
     # -- public getters --
 
@@ -235,3 +302,24 @@ class SettingsTab(QWidget):
 
     def set_resume_index(self, idx: int) -> None:
         self.resume_index.setValue(idx)
+
+    def get_delay_ms(self) -> float:
+        return self.delay_spin.value() if self.delay_check.isChecked() else 0.0
+
+    def get_jitter_ms(self) -> float:
+        return self.jitter_spin.value() if self.delay_check.isChecked() else 0.0
+
+    def get_auto_pause_enabled(self) -> bool:
+        return self.autopause_check.isChecked()
+
+    def get_auto_pause_threshold(self) -> int:
+        return self.autopause_spin.value()
+
+    def get_interleave_enabled(self) -> bool:
+        return self.interleave_check.isChecked()
+
+    def get_interleave_every(self) -> int:
+        return self.interleave_every_spin.value()
+
+    def get_interleave_request(self) -> str:
+        return self.interleave_request_edit.toPlainText().strip()

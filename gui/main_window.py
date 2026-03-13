@@ -186,6 +186,13 @@ class MainWindow(QMainWindow):
             verify_ssl=self.settings_tab.get_verify_ssl(),
             cookie_handling=self.settings_tab.get_cookie_handling(),
             start_index=start_idx,
+            delay_ms=self.settings_tab.get_delay_ms(),
+            jitter_ms=self.settings_tab.get_jitter_ms(),
+            auto_pause_errors=self.settings_tab.get_auto_pause_enabled(),
+            auto_pause_threshold=self.settings_tab.get_auto_pause_threshold(),
+            interleave_enabled=self.settings_tab.get_interleave_enabled(),
+            interleave_every=self.settings_tab.get_interleave_every(),
+            interleave_request=self.settings_tab.get_interleave_request(),
         )
 
         # Build payload iterator based on attack type

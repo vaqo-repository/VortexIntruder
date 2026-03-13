@@ -65,6 +65,14 @@ class AttackConfig:
     verify_ssl: bool = False
     cookie_handling: str = "preserve"  # "preserve" or "update"
     start_index: int = 0
+    # Throttling & interleave
+    delay_ms: float = 0.0            # delay between each fuzz request (ms)
+    jitter_ms: float = 0.0           # random ±jitter added to delay (ms)
+    interleave_enabled: bool = False  # send a safe request every N fuzz requests
+    interleave_every: int = 3        # N — every how many fuzz requests
+    interleave_request: str = ""     # raw HTTP text of the safe request
+    auto_pause_errors: bool = False  # pause when N consecutive errors occur
+    auto_pause_threshold: int = 5    # N consecutive errors before auto-pause
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +155,7 @@ class FuzzerEngine(QThread):
 
         request_counter = 0
         error_counter = 0
+        consecutive_errors = 0
         start_time = time.monotonic()
         tasks: list[asyncio.Task] = []
 
@@ -176,6 +185,21 @@ class FuzzerEngine(QThread):
 
                 request_counter += 1
                 rid = request_counter
+
+                # -- Delay + Jitter --
+                if self.config.delay_ms > 0 or self.config.jitter_ms > 0:
+                    import random
+                    delay = self.config.delay_ms
+                    if self.config.jitter_ms > 0:
+                        delay += random.uniform(-self.config.jitter_ms, self.config.jitter_ms)
+                    if delay > 0:
+                        await asyncio.sleep(max(0, delay) / 1000.0)
+
+                # -- Interleave safe request --
+                if (self.config.interleave_enabled
+                        and self.config.interleave_request
+                        and request_counter % self.config.interleave_every == 0):
+                    await self._send_safe_request(client, cookie_jar)
 
                 # Process payloads through the pipeline
                 processed = []
@@ -207,8 +231,22 @@ class FuzzerEngine(QThread):
                     )
                     for t in done:
                         result = t.result()
-                        if result and result.error:
+                        has_error = bool(result and (result.error or result.timed_out
+                                                     or (result.status_code >= 400)))
+                        if has_error:
                             error_counter += 1
+                            consecutive_errors += 1
+                        else:
+                            consecutive_errors = 0
+                        # Auto-pause on consecutive errors
+                        if (self.config.auto_pause_errors
+                                and consecutive_errors >= self.config.auto_pause_threshold):
+                            self._paused = True
+                            consecutive_errors = 0
+                            self.log_message.emit(
+                                f"[WARN] Auto-paused after {self.config.auto_pause_threshold} "
+                                f"consecutive errors. Resume when ready."
+                            )
                         self.session_index.emit(idx)
                     tasks = list(pending)
 
@@ -231,6 +269,28 @@ class FuzzerEngine(QThread):
                 f"[DONE] {request_counter} requests in {elapsed:.2f}s "
                 f"({rps:.1f} req/s, {err_rate:.1f}% errors)"
             )
+
+    async def _send_safe_request(
+        self,
+        client: httpx.AsyncClient,
+        cookie_jar: dict[str, str],
+    ) -> None:
+        """Send the interleave safe request without recording a result."""
+        try:
+            parsed = parse_raw_request(
+                self.config.interleave_request, self.config.target_override
+            )
+            if self.config.update_content_length:
+                parsed.headers = update_content_length(parsed.headers, parsed.body)
+            await client.request(
+                method=parsed.method,
+                url=parsed.url,
+                headers=parsed.headers,
+                content=parsed.body.encode("utf-8") if parsed.body else None,
+            )
+            self.log_message.emit("[INTERLEAVE] Safe request sent.")
+        except Exception as exc:
+            self.log_message.emit(f"[INTERLEAVE] Safe request failed: {exc}")
 
     async def _send_request(
         self,
