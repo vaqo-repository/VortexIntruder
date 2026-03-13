@@ -50,9 +50,7 @@ class _StepWidget(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(0)
-
-        splitter = QSplitter(Qt.Orientation.Vertical)
+        layout.setSpacing(6)
 
         # -- Request editor --
         req_group = QGroupBox("HTTP Request")
@@ -68,10 +66,11 @@ class _StepWidget(QWidget):
             "Tip: use {{variable_name}} to inject values extracted in earlier steps."
         )
         req_layout.addWidget(self.request_edit)
-        splitter.addWidget(req_group)
+        layout.addWidget(req_group, 3)
 
         # -- Extractions --
         ext_group = QGroupBox("Extract Variables from Response")
+        ext_group.setMinimumHeight(160)
         ext_layout = QVBoxLayout(ext_group)
         ext_layout.setContentsMargins(6, 6, 6, 6)
         ext_layout.setSpacing(4)
@@ -101,12 +100,7 @@ class _StepWidget(QWidget):
         self.ext_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.ext_table.setMinimumHeight(80)
         ext_layout.addWidget(self.ext_table)
-        splitter.addWidget(ext_group)
-
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([320, 180])
-        layout.addWidget(splitter)
+        layout.addWidget(ext_group, 2)
 
     # -- extraction table helpers --
 
