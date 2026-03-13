@@ -1,5 +1,5 @@
 """
-VortexIntruder v1.0 – Async Fuzzer Engine
+VortexIntruder v1.0 â€“ Async Fuzzer Engine
 Core engine using httpx.AsyncClient + asyncio.Semaphore.
 Runs in a background QThread to avoid freezing the GUI.
 """
@@ -60,6 +60,7 @@ class MacroConfig:
     run_before: bool = True          # execute once before attack starts
     rerun_on_response: str = ""      # re-run when fuzz response body contains this text
     rerun_every: int = 0             # re-run every N fuzz requests (0 = disabled)
+    run_per_request: bool = False    # run before EACH fuzz request (independent session per request)
 
 
 # ---------------------------------------------------------------------------
@@ -101,9 +102,9 @@ class AttackConfig:
     start_index: int = 0
     # Throttling & interleave
     delay_ms: float = 0.0            # delay between each fuzz request (ms)
-    jitter_ms: float = 0.0           # random ±jitter added to delay (ms)
+    jitter_ms: float = 0.0           # random Â±jitter added to delay (ms)
     interleave_enabled: bool = False  # send a safe request every N fuzz requests
-    interleave_every: int = 3        # N — every how many fuzz requests
+    interleave_every: int = 3        # N â€” every how many fuzz requests
     interleave_request: str = ""     # raw HTTP text of the safe request
     interleave_follow_redirects: bool = True  # follow redirects for safe request
     auto_pause_errors: bool = False  # pause when N consecutive errors occur
@@ -189,6 +190,9 @@ class FuzzerEngine(QThread):
         }
         if proxy_url:
             client_kwargs["proxy"] = proxy_url
+
+        # Store for per-request macro isolation
+        self._client_kwargs = client_kwargs
 
         request_counter = 0
         error_counter = 0
@@ -347,20 +351,36 @@ class FuzzerEngine(QThread):
     # Macro helpers
     # -----------------------------------------------------------------------
 
-    def _apply_macro_vars(self, text: str) -> str:
-        """Replace {{var_name}} placeholders with extracted macro values."""
-        for var, val in self._macro_vars.items():
+    @staticmethod
+    def _apply_vars(text: str, variables: dict[str, str]) -> str:
+        """Replace {{var_name}} placeholders with values from the given dict."""
+        for var, val in variables.items():
             text = text.replace(f"{{{{{var}}}}}", val)
         return text
 
-    async def _run_macro(self, macro: MacroConfig, client: httpx.AsyncClient) -> None:
-        """Execute all steps of a macro and update self._macro_vars."""
+    def _apply_macro_vars(self, text: str) -> str:
+        """Replace {{var_name}} placeholders with extracted macro values."""
+        return self._apply_vars(text, self._macro_vars)
+
+    async def _run_macro(
+        self,
+        macro: MacroConfig,
+        client: httpx.AsyncClient,
+        target_vars: dict[str, str] | None = None,
+    ) -> dict[str, str]:
+        """Execute all steps of a macro and extract variables.
+
+        If *target_vars* is given, variables are written there (per-request mode).
+        Otherwise they are written to the shared `self._macro_vars`.
+        Returns the variables dict that was written to.
+        """
+        variables = target_vars if target_vars is not None else self._macro_vars
         self.log_message.emit(f"[MACRO] Running '{macro.name}'...")
         for i, step in enumerate(macro.steps):
             if not step.raw_request.strip():
                 continue
             try:
-                raw = self._apply_macro_vars(step.raw_request)
+                raw = self._apply_vars(step.raw_request, variables)
                 parsed = parse_raw_request(raw, self.config.target_override)
                 if self.config.update_content_length:
                     parsed.headers = update_content_length(parsed.headers, parsed.body)
@@ -372,20 +392,29 @@ class FuzzerEngine(QThread):
                     follow_redirects=True,
                 )
                 self.log_message.emit(
-                    f"[MACRO] '{macro.name}' step {i + 1} → {response.status_code}"
+                    f"[MACRO] '{macro.name}' step {i + 1} â†’ {response.status_code}"
                 )
                 for ext in step.extractions:
                     if not ext.key or not ext.variable:
                         continue
                     value = ""
                     if ext.source == "cookie":
-                        for sc in response.headers.get_list("set-cookie"):
+                        # Collect Set-Cookie from redirect history + final response
+                        all_set_cookies: list[str] = []
+                        if response.history:
+                            for hist_resp in response.history:
+                                all_set_cookies.extend(
+                                    hist_resp.headers.get_list("set-cookie")
+                                )
+                        all_set_cookies.extend(
+                            response.headers.get_list("set-cookie")
+                        )
+                        for sc in all_set_cookies:
                             part = sc.split(";")[0].strip()
                             if "=" in part:
                                 k, v = part.split("=", 1)
                                 if k.strip() == ext.key:
                                     value = v.strip()
-                                    break
                     elif ext.source == "header":
                         value = response.headers.get(ext.key, "")
                     elif ext.source == "body_regex":
@@ -397,12 +426,13 @@ class FuzzerEngine(QThread):
                         except re.error:
                             pass
                     if value:
-                        self._macro_vars[ext.variable] = value
+                        variables[ext.variable] = value
                         self.log_message.emit(
                             f"[MACRO] Extracted {{{{{ext.variable}}}}} = {value[:60]}"
                         )
             except Exception as exc:
                 self.log_message.emit(f"[MACRO] '{macro.name}' step {i + 1} failed: {exc}")
+        return variables
 
     async def _send_safe_request(
         self,
@@ -432,12 +462,117 @@ class FuzzerEngine(QThread):
             result.response_body = response.text
             result.response_headers = dict(response.headers)
             self.log_message.emit(
-                f"[INTERLEAVE] Safe request sent → {response.status_code}"
+                f"[INTERLEAVE] Safe request sent â†’ {response.status_code}"
             )
         except Exception as exc:
             result.error = str(exc)
             self.log_message.emit(f"[INTERLEAVE] Safe request failed: {exc}")
         self.result_ready.emit(result)
+
+    async def _do_fuzz_request(
+        self,
+        client: httpx.AsyncClient,
+        rid: int,
+        pos_index: int,
+        payloads: list[str],
+        cookie_jar: dict[str, str],
+        per_req_vars: dict[str, str],
+        result: FuzzResult,
+    ) -> FuzzResult:
+        """Build, send, and process a single fuzz request."""
+        # Substitute payloads into the raw request
+        if self.config.attack_type == "sniper":
+            raw_filled = substitute_payload(
+                self.config.raw_request, payloads,
+                mode="sniper", position_index=pos_index,
+            )
+        elif self.config.attack_type == "battering_ram":
+            raw_filled = substitute_payload(
+                self.config.raw_request, payloads, mode="battering_ram",
+            )
+        else:
+            raw_filled = substitute_payload(
+                self.config.raw_request, payloads, mode="pitchfork",
+            )
+
+        # Apply macro variables (per-request first, then shared)
+        if per_req_vars:
+            raw_filled = self._apply_vars(raw_filled, per_req_vars)
+        if self._macro_vars:
+            raw_filled = self._apply_macro_vars(raw_filled)
+
+        # Parse the filled request
+        parsed = parse_raw_request(raw_filled, self.config.target_override)
+        result.request_text = raw_filled
+
+        # Connection header override
+        if self.config.connection_header:
+            parsed.headers["Connection"] = self.config.connection_header
+
+        # Cookie handling
+        if self.config.cookie_handling == "update" and cookie_jar:
+            existing = parsed.headers.get("Cookie", "")
+            for k, v in cookie_jar.items():
+                if k not in existing:
+                    existing += f"; {k}={v}" if existing else f"{k}={v}"
+            parsed.headers["Cookie"] = existing
+
+        # Update Content-Length
+        if self.config.update_content_length:
+            parsed.headers = update_content_length(parsed.headers, parsed.body)
+
+        # Send
+        t0 = time.monotonic()
+        response = await client.request(
+            method=parsed.method,
+            url=parsed.url,
+            headers=parsed.headers,
+            content=parsed.body.encode("utf-8") if parsed.body else None,
+        )
+        elapsed_ms = (time.monotonic() - t0) * 1000
+
+        result.status_code = response.status_code
+        result.length = len(response.content)
+        result.elapsed_ms = round(elapsed_ms, 1)
+        result.response_body = response.text
+        result.response_headers = dict(response.headers)
+
+        if response.status_code >= 400:
+            result.error = f"HTTP {response.status_code}"
+
+        # Update cookie jar
+        if self.config.cookie_handling == "update":
+            for cookie_header in response.headers.get_list("set-cookie"):
+                if "=" in cookie_header:
+                    part = cookie_header.split(";")[0]
+                    k, v = part.split("=", 1)
+                    cookie_jar[k.strip()] = v.strip()
+
+        # Grep - Match
+        if self.config.grep_match_strings:
+            body_lower = response.text.lower()
+            for gm in self.config.grep_match_strings:
+                if gm.lower() in body_lower:
+                    result.grep_match = True
+                    break
+
+        # Grep - Exclude
+        if self.config.grep_exclude_strings:
+            body_lower = response.text.lower()
+            for ge in self.config.grep_exclude_strings:
+                if ge.lower() in body_lower:
+                    return result
+
+        # Grep - Extract
+        if self.config.grep_extract_regex:
+            try:
+                m = re.search(self.config.grep_extract_regex, response.text)
+                if m:
+                    result.grep_extract = m.group(1) if m.lastindex else m.group(0)
+            except re.error:
+                pass
+
+        return result
 
     async def _send_request(
         self,
@@ -455,96 +590,28 @@ class FuzzerEngine(QThread):
                 return result
 
             try:
-                # Substitute payloads into the raw request
-                if self.config.attack_type == "sniper":
-                    raw_filled = substitute_payload(
-                        self.config.raw_request, payloads,
-                        mode="sniper", position_index=pos_index,
-                    )
-                elif self.config.attack_type == "battering_ram":
-                    raw_filled = substitute_payload(
-                        self.config.raw_request, payloads, mode="battering_ram",
-                    )
-                else:
-                    raw_filled = substitute_payload(
-                        self.config.raw_request, payloads, mode="pitchfork",
-                    )
-
-                # Apply macro variables ({{var_name}} → extracted value)
-                if self._macro_vars:
-                    raw_filled = self._apply_macro_vars(raw_filled)
-
-                # Parse the filled request
-                parsed = parse_raw_request(raw_filled, self.config.target_override)
-                result.request_text = raw_filled
-
-                # Connection header override
-                if self.config.connection_header:
-                    parsed.headers["Connection"] = self.config.connection_header
-
-                # Cookie handling
-                if self.config.cookie_handling == "update" and cookie_jar:
-                    existing = parsed.headers.get("Cookie", "")
-                    for k, v in cookie_jar.items():
-                        if k not in existing:
-                            existing += f"; {k}={v}" if existing else f"{k}={v}"
-                    parsed.headers["Cookie"] = existing
-
-                # Update Content-Length
-                if self.config.update_content_length:
-                    parsed.headers = update_content_length(parsed.headers, parsed.body)
-
-                # Build httpx request
-                t0 = time.monotonic()
-                response = await client.request(
-                    method=parsed.method,
-                    url=parsed.url,
-                    headers=parsed.headers,
-                    content=parsed.body.encode("utf-8") if parsed.body else None,
+                # -- Per-request macros: isolated client per task --
+                per_req_vars: dict[str, str] = {}
+                has_per_req = any(
+                    m.run_per_request and m.steps for m in self.config.macros
                 )
-                elapsed_ms = (time.monotonic() - t0) * 1000
-
-                result.status_code = response.status_code
-                result.length = len(response.content)
-                result.elapsed_ms = round(elapsed_ms, 1)
-                result.response_body = response.text
-                result.response_headers = dict(response.headers)
-
-                # Flag non-2xx status as error info
-                if response.status_code >= 400:
-                    result.error = f"HTTP {response.status_code}"
-
-                # Update cookie jar
-                if self.config.cookie_handling == "update":
-                    for cookie_header in response.headers.get_list("set-cookie"):
-                        if "=" in cookie_header:
-                            part = cookie_header.split(";")[0]
-                            k, v = part.split("=", 1)
-                            cookie_jar[k.strip()] = v.strip()
-
-                # Grep - Match
-                if self.config.grep_match_strings:
-                    body_lower = response.text.lower()
-                    for gm in self.config.grep_match_strings:
-                        if gm.lower() in body_lower:
-                            result.grep_match = True
-                            break
-
-                # Grep - Exclude
-                if self.config.grep_exclude_strings:
-                    body_lower = response.text.lower()
-                    for ge in self.config.grep_exclude_strings:
-                        if ge.lower() in body_lower:
-                            return result  # exclude from results
-
-                # Grep - Extract
-                if self.config.grep_extract_regex:
-                    try:
-                        m = re.search(self.config.grep_extract_regex, response.text)
-                        if m:
-                            result.grep_extract = m.group(1) if m.lastindex else m.group(0)
-                    except re.error:
-                        pass
+                if has_per_req:
+                    async with httpx.AsyncClient(**self._client_kwargs) as iso_client:
+                        for macro in self.config.macros:
+                            if macro.run_per_request and macro.steps:
+                                await self._run_macro(
+                                    macro, iso_client, target_vars=per_req_vars
+                                )
+                        # Send the fuzz request through the isolated client too
+                        result = await self._do_fuzz_request(
+                            iso_client, rid, pos_index, payloads,
+                            cookie_jar, per_req_vars, result,
+                        )
+                else:
+                    result = await self._do_fuzz_request(
+                        client, rid, pos_index, payloads,
+                        cookie_jar, per_req_vars, result,
+                    )
 
             except httpx.TimeoutException:
                 result.timed_out = True

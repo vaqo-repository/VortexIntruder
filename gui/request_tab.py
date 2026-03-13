@@ -253,3 +253,16 @@ class RequestTab(QWidget):
 
     def set_raw_request(self, text: str) -> None:
         self.editor.setPlainText(text)
+
+    def set_target(self, target: str) -> None:
+        self.target_input.setText(target)
+
+    def get_data(self) -> dict:
+        return {
+            "raw_request": self.get_raw_request(),
+            "target": self.get_target(),
+        }
+
+    def set_data(self, data: dict) -> None:
+        self.set_raw_request(data.get("raw_request", ""))
+        self.set_target(data.get("target", ""))

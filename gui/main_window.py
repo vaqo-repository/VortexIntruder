@@ -13,6 +13,7 @@ from PyQt6.QtGui import QAction, QCloseEvent, QFont
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -94,6 +95,14 @@ class MainWindow(QMainWindow):
             "font-style: italic; margin-right: 16px;"
         )
         title_row.addWidget(author_lbl)
+
+        # Save / Load scenario buttons
+        self.save_scenario_btn = QPushButton("Save Scenario")
+        self.save_scenario_btn.clicked.connect(self._save_scenario)
+        self.load_scenario_btn = QPushButton("Load Scenario")
+        self.load_scenario_btn.clicked.connect(self._load_scenario)
+        title_row.addWidget(self.save_scenario_btn)
+        title_row.addWidget(self.load_scenario_btn)
 
         # Control buttons
         self.start_btn = QPushButton("Start Attack")
@@ -307,6 +316,55 @@ class MainWindow(QMainWindow):
     def _on_compare_responses(self, body1: str, body2: str) -> None:
         dlg = DiffDialog(body1, body2, self)
         dlg.exec()
+
+    # -------------------------------------------------------- SAVE / LOAD SCENARIO
+
+    def _collect_scenario(self) -> dict:
+        return {
+            "version": "1.1",
+            "request": self.request_tab.get_data(),
+            "payloads": self.payloads_tab.get_data(),
+            "settings": self.settings_tab.get_data(),
+            "macros": self.macros_tab.get_data(),
+        }
+
+    def _apply_scenario(self, scenario: dict) -> None:
+        if "request" in scenario:
+            self.request_tab.set_data(scenario["request"])
+        if "payloads" in scenario:
+            self.payloads_tab.set_data(scenario["payloads"])
+        if "settings" in scenario:
+            self.settings_tab.set_data(scenario["settings"])
+        if "macros" in scenario:
+            self.macros_tab.set_data(scenario["macros"])
+
+    def _save_scenario(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Scenario", "", "VortexIntruder Scenario (*.vortex);;JSON (*.json);;All Files (*)"
+        )
+        if not path:
+            return
+        try:
+            scenario = self._collect_scenario()
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(scenario, f, indent=2, ensure_ascii=False)
+            self._status_bar.showMessage(f"Scenario saved: {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Save Error", str(e))
+
+    def _load_scenario(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Load Scenario", "", "VortexIntruder Scenario (*.vortex);;JSON (*.json);;All Files (*)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                scenario = json.load(f)
+            self._apply_scenario(scenario)
+            self._status_bar.showMessage(f"Scenario loaded: {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Load Error", str(e))
 
     # -------------------------------------------------------- CLEAN EXIT
 

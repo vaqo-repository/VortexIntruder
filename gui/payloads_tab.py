@@ -743,3 +743,78 @@ class PayloadsTab(QWidget):
         else:
             base = 0
         return base * self.repeat_count.value()
+
+    def get_data(self) -> dict:
+        """Serialize all payload set states for save/load."""
+        self._save_set_state(self._current_set_idx)
+        sets = []
+        for s in self._set_states:
+            sets.append({
+                "type_idx": s["type_idx"],
+                "manual_text": s["manual_text"],
+                "file_path": s["file_path"],
+                "num_start": s["num_start"],
+                "num_end": s["num_end"],
+                "num_step": s["num_step"],
+                "num_min_int": s["num_min_int"],
+                "num_max_int": s["num_max_int"],
+                "num_min_frac": s["num_min_frac"],
+                "num_max_frac": s["num_max_frac"],
+                "num_sequential": s["num_sequential"],
+                "num_decimal": s["num_decimal"],
+                "brute_charset": s["brute_charset"],
+                "brute_min": s["brute_min"],
+                "brute_max": s["brute_max"],
+                "null_count": s["null_count"],
+                "filter_check": s["filter_check"],
+                "filter_min": s["filter_min"],
+                "filter_max": s["filter_max"],
+                "repeat_count": s["repeat_count"],
+                "order_sequential": s["order_sequential"],
+                "rules": [
+                    {"type": r.rule_type.value, "param1": r.param1, "param2": r.param2}
+                    for r in s["rules"]
+                ],
+                "encoding_chars": sorted(s["encoding_chars"]),
+            })
+        return {"current_set": self._current_set_idx, "sets": sets}
+
+    def set_data(self, data: dict) -> None:
+        """Restore all payload set states from saved data."""
+        sets = data.get("sets", [])
+        for i, sd in enumerate(sets[:self._num_sets]):
+            rules = []
+            for rd in sd.get("rules", []):
+                for rt in RuleType:
+                    if rt.value == rd.get("type"):
+                        rules.append(ProcessingRule(rt, rd.get("param1", ""), rd.get("param2", "")))
+                        break
+            self._set_states[i] = {
+                "type_idx": sd.get("type_idx", 0),
+                "manual_text": sd.get("manual_text", ""),
+                "file_path": sd.get("file_path", ""),
+                "num_start": sd.get("num_start", 0.0),
+                "num_end": sd.get("num_end", 100.0),
+                "num_step": sd.get("num_step", 1.0),
+                "num_min_int": sd.get("num_min_int", 0),
+                "num_max_int": sd.get("num_max_int", 0),
+                "num_min_frac": sd.get("num_min_frac", 0),
+                "num_max_frac": sd.get("num_max_frac", 0),
+                "num_sequential": sd.get("num_sequential", True),
+                "num_decimal": sd.get("num_decimal", True),
+                "brute_charset": sd.get("brute_charset", "abcdefghijklmnopqrstuvwxyz"),
+                "brute_min": sd.get("brute_min", 1),
+                "brute_max": sd.get("brute_max", 4),
+                "null_count": sd.get("null_count", 100),
+                "filter_check": sd.get("filter_check", False),
+                "filter_min": sd.get("filter_min", 0),
+                "filter_max": sd.get("filter_max", 99999),
+                "repeat_count": sd.get("repeat_count", 1),
+                "order_sequential": sd.get("order_sequential", True),
+                "rules": rules,
+                "encoding_chars": set(sd.get("encoding_chars", [])),
+            }
+        cur = data.get("current_set", 0)
+        self.set_combo.setCurrentIndex(cur)
+        self._current_set_idx = cur
+        self._load_set_state(cur)

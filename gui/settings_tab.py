@@ -332,3 +332,58 @@ class SettingsTab(QWidget):
 
     def get_interleave_follow_redirects(self) -> bool:
         return self.interleave_follow_redirects.isChecked()
+
+    def get_data(self) -> dict:
+        return {
+            "attack_type": self.get_attack_type(),
+            "concurrency": self.get_concurrency(),
+            "timeout": self.get_timeout(),
+            "follow_redirects": self.get_follow_redirects(),
+            "update_content_length": self.get_update_content_length(),
+            "verify_ssl": self.get_verify_ssl(),
+            "connection_header": self.connection_combo.currentIndex(),
+            "cookie_handling": self.cookie_combo.currentIndex(),
+            "proxy": self.get_proxy(),
+            "grep_match": self.grep_match_text.toPlainText(),
+            "grep_exclude": self.grep_exclude_text.toPlainText(),
+            "grep_extract": self.get_grep_extract_regex(),
+            "start_index": self.get_start_index(),
+            "delay_check": self.delay_check.isChecked(),
+            "delay_ms": self.delay_spin.value(),
+            "jitter_ms": self.jitter_spin.value(),
+            "autopause_check": self.autopause_check.isChecked(),
+            "autopause_threshold": self.autopause_spin.value(),
+            "interleave_check": self.interleave_check.isChecked(),
+            "interleave_every": self.interleave_every_spin.value(),
+            "interleave_request": self.interleave_request_edit.toPlainText(),
+            "interleave_follow_redirects": self.interleave_follow_redirects.isChecked(),
+        }
+
+    def set_data(self, data: dict) -> None:
+        # Attack type
+        at = data.get("attack_type", "sniper")
+        for i, (_, key) in enumerate(ATTACK_TYPES):
+            if key == at:
+                self.attack_combo.setCurrentIndex(i)
+                break
+        self.concurrency_slider.setValue(data.get("concurrency", 20))
+        self.timeout_spin.setValue(data.get("timeout", 10.0))
+        self.follow_redirects.setChecked(data.get("follow_redirects", False))
+        self.update_content_length.setChecked(data.get("update_content_length", True))
+        self.verify_ssl.setChecked(data.get("verify_ssl", False))
+        self.connection_combo.setCurrentIndex(data.get("connection_header", 0))
+        self.cookie_combo.setCurrentIndex(data.get("cookie_handling", 0))
+        self.proxy_input.setText(data.get("proxy", ""))
+        self.grep_match_text.setPlainText(data.get("grep_match", ""))
+        self.grep_exclude_text.setPlainText(data.get("grep_exclude", ""))
+        self.grep_extract_input.setText(data.get("grep_extract", ""))
+        self.resume_index.setValue(data.get("start_index", 0))
+        self.delay_check.setChecked(data.get("delay_check", False))
+        self.delay_spin.setValue(data.get("delay_ms", 0))
+        self.jitter_spin.setValue(data.get("jitter_ms", 0))
+        self.autopause_check.setChecked(data.get("autopause_check", False))
+        self.autopause_spin.setValue(data.get("autopause_threshold", 5))
+        self.interleave_check.setChecked(data.get("interleave_check", False))
+        self.interleave_every_spin.setValue(data.get("interleave_every", 3))
+        self.interleave_request_edit.setPlainText(data.get("interleave_request", ""))
+        self.interleave_follow_redirects.setChecked(data.get("interleave_follow_redirects", True))

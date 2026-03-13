@@ -242,6 +242,16 @@ class _MacroEditor(QWidget):
         self.run_before_check.setChecked(True)
         trigger_layout.addWidget(self.run_before_check)
 
+        self.run_per_request_check = QCheckBox(
+            "Run before each fuzz request (independent session per request)"
+        )
+        self.run_per_request_check.setToolTip(
+            "Each fuzz request runs its own macro chain inside the semaphore.\n"
+            "Allows concurrency > 1 with session-dependent targets (e.g. MFA brute-force).\n"
+            "When enabled, 'Run before attack' and 'Re-run every N' are ignored for this macro."
+        )
+        trigger_layout.addWidget(self.run_per_request_check)
+
         rerun_row = QHBoxLayout()
         self.rerun_on_check = QCheckBox("Re-run when fuzz response contains:")
         self.rerun_on_edit = QLineEdit()
@@ -318,6 +328,7 @@ class _MacroEditor(QWidget):
             "run_before": self.run_before_check.isChecked(),
             "rerun_on_response": self.rerun_on_edit.text().strip() if self.rerun_on_check.isChecked() else "",
             "rerun_every": self.rerun_every_spin.value() if self.rerun_every_check.isChecked() else 0,
+            "run_per_request": self.run_per_request_check.isChecked(),
         }
 
     def set_data(self, data: dict) -> None:
@@ -349,6 +360,8 @@ class _MacroEditor(QWidget):
         self.rerun_every_check.setChecked(rerun_every > 0)
         self.rerun_every_spin.setValue(rerun_every if rerun_every > 0 else 50)
         self.rerun_every_spin.setEnabled(rerun_every > 0)
+
+        self.run_per_request_check.setChecked(data.get("run_per_request", False))
 
 
 # ---------------------------------------------------------------------------
@@ -505,5 +518,24 @@ class MacrosTab(QWidget):
                     run_before=data.get("run_before", True),
                     rerun_on_response=data.get("rerun_on_response", ""),
                     rerun_every=data.get("rerun_every", 0),
+                    run_per_request=data.get("run_per_request", False),
                 ))
         return configs
+
+    def get_data(self) -> list[dict]:
+        """Return raw macro dicts for serialization."""
+        self._save_current()
+        return list(self._macros)
+
+    def set_data(self, macros: list[dict]) -> None:
+        """Restore macros from saved dicts."""
+        self._current_idx = -1
+        self._macros.clear()
+        self.macro_list.clear()
+        for data in macros:
+            self._macros.append(data)
+            self.macro_list.addItem(data.get("name", "Macro"))
+        if self._macros:
+            self.macro_list.setCurrentRow(0)
+        else:
+            self._stack.setCurrentIndex(0)
