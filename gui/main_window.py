@@ -193,6 +193,7 @@ class MainWindow(QMainWindow):
             interleave_enabled=self.settings_tab.get_interleave_enabled(),
             interleave_every=self.settings_tab.get_interleave_every(),
             interleave_request=self.settings_tab.get_interleave_request(),
+            interleave_follow_redirects=self.settings_tab.get_interleave_follow_redirects(),
         )
 
         # Build payload iterator based on attack type
@@ -209,15 +210,13 @@ class MainWindow(QMainWindow):
                 iterator = battering_ram_iterator(gen1)
                 total = est
             elif attack_type == "pitchfork":
-                # For pitchfork we need generators per-set
-                # Use the same generator for now (user can configure multiple sets)
-                gens = [self.payloads_tab.get_payload_generator(start_idx)
-                        for _ in range(position_count)]
+                gens = [self.payloads_tab.get_payload_generator_for_set(i, start_idx)
+                        for i in range(position_count)]
                 iterator = pitchfork_iterator(*gens)
                 total = est
             elif attack_type == "cluster_bomb":
-                gens = [self.payloads_tab.get_payload_generator(start_idx)
-                        for _ in range(position_count)]
+                gens = [self.payloads_tab.get_payload_generator_for_set(i, start_idx)
+                        for i in range(position_count)]
                 iterator = cluster_bomb_iterator(*gens)
                 total = est ** position_count if position_count > 0 else est
             else:

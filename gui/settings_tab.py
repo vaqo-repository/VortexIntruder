@@ -239,6 +239,11 @@ class SettingsTab(QWidget):
         self.interleave_request_edit.setEnabled(False)
         thr_layout.addWidget(self.interleave_request_edit)
 
+        self.interleave_follow_redirects = QCheckBox("Follow redirects for safe request")
+        self.interleave_follow_redirects.setChecked(True)
+        self.interleave_follow_redirects.setEnabled(False)
+        thr_layout.addWidget(self.interleave_follow_redirects)
+
         layout.addWidget(throttle_group)
 
         layout.addStretch()
@@ -251,6 +256,7 @@ class SettingsTab(QWidget):
 
     def _on_interleave_toggled(self, checked: bool) -> None:
         self.interleave_request_edit.setEnabled(checked)
+        self.interleave_follow_redirects.setEnabled(checked)
 
     # -- public getters --
 
@@ -323,3 +329,6 @@ class SettingsTab(QWidget):
 
     def get_interleave_request(self) -> str:
         return self.interleave_request_edit.toPlainText().strip()
+
+    def get_interleave_follow_redirects(self) -> bool:
+        return self.interleave_follow_redirects.isChecked()

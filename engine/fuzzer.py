@@ -71,6 +71,7 @@ class AttackConfig:
     interleave_enabled: bool = False  # send a safe request every N fuzz requests
     interleave_every: int = 3        # N — every how many fuzz requests
     interleave_request: str = ""     # raw HTTP text of the safe request
+    interleave_follow_redirects: bool = True  # follow redirects for safe request
     auto_pause_errors: bool = False  # pause when N consecutive errors occur
     auto_pause_threshold: int = 5    # N consecutive errors before auto-pause
 
@@ -275,22 +276,35 @@ class FuzzerEngine(QThread):
         client: httpx.AsyncClient,
         cookie_jar: dict[str, str],
     ) -> None:
-        """Send the interleave safe request without recording a result."""
+        """Send the interleave safe request and emit it as a result row."""
+        result = FuzzResult(request_id=0, payload="[SAFE REQUEST]")
         try:
             parsed = parse_raw_request(
                 self.config.interleave_request, self.config.target_override
             )
             if self.config.update_content_length:
                 parsed.headers = update_content_length(parsed.headers, parsed.body)
-            await client.request(
+            result.request_text = self.config.interleave_request
+            t0 = time.monotonic()
+            response = await client.request(
                 method=parsed.method,
                 url=parsed.url,
                 headers=parsed.headers,
                 content=parsed.body.encode("utf-8") if parsed.body else None,
+                follow_redirects=self.config.interleave_follow_redirects,
             )
-            self.log_message.emit("[INTERLEAVE] Safe request sent.")
+            result.elapsed_ms = round((time.monotonic() - t0) * 1000, 1)
+            result.status_code = response.status_code
+            result.length = len(response.content)
+            result.response_body = response.text
+            result.response_headers = dict(response.headers)
+            self.log_message.emit(
+                f"[INTERLEAVE] Safe request sent → {response.status_code}"
+            )
         except Exception as exc:
+            result.error = str(exc)
             self.log_message.emit(f"[INTERLEAVE] Safe request failed: {exc}")
+        self.result_ready.emit(result)
 
     async def _send_request(
         self,

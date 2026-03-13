@@ -82,7 +82,101 @@ class PayloadsTab(QWidget):
         self.transport_encoder = TransportEncoder()
         self._rules_model = QStringListModel()
         self._file_path = ""
+        self._current_set_idx = 0
+        self._num_sets = 4
+        self._set_states: list[dict] = [self._default_state() for _ in range(self._num_sets)]
         self._init_ui()
+        # Connect set switcher AFTER ui is built
+        self.set_combo.currentIndexChanged.connect(self._on_set_changed)
+
+    @staticmethod
+    def _default_state() -> dict:
+        return {
+            "type_idx": 0,
+            "manual_text": "",
+            "file_path": "",
+            "num_start": 0.0, "num_end": 100.0, "num_step": 1.0,
+            "num_min_int": 0, "num_max_int": 0,
+            "num_min_frac": 0, "num_max_frac": 0,
+            "num_sequential": True, "num_decimal": True,
+            "brute_charset": "abcdefghijklmnopqrstuvwxyz",
+            "brute_min": 1, "brute_max": 4,
+            "null_count": 100,
+            "filter_check": False, "filter_min": 0, "filter_max": 99999,
+            "repeat_count": 1, "order_sequential": True,
+            "rules": [],
+            "encoding_chars": set(),
+        }
+
+    def _save_set_state(self, idx: int) -> None:
+        """Save current UI values to the state dict for set idx."""
+        s = self._set_states[idx]
+        s["type_idx"] = self.type_combo.currentIndex()
+        s["manual_text"] = self.manual_text.toPlainText()
+        s["file_path"] = self._file_path
+        s["num_start"] = self.num_start.value()
+        s["num_end"] = self.num_end.value()
+        s["num_step"] = self.num_step.value()
+        s["num_min_int"] = self.num_min_int.value()
+        s["num_max_int"] = self.num_max_int.value()
+        s["num_min_frac"] = self.num_min_frac.value()
+        s["num_max_frac"] = self.num_max_frac.value()
+        s["num_sequential"] = self.num_sequential_radio.isChecked()
+        s["num_decimal"] = self.num_decimal_radio.isChecked()
+        s["brute_charset"] = self.brute_charset.text()
+        s["brute_min"] = self.brute_min.value()
+        s["brute_max"] = self.brute_max.value()
+        s["null_count"] = self.null_count.value()
+        s["filter_check"] = self.filter_check.isChecked()
+        s["filter_min"] = self.filter_min.value()
+        s["filter_max"] = self.filter_max.value()
+        s["repeat_count"] = self.repeat_count.value()
+        s["order_sequential"] = self.order_sequential_radio.isChecked()
+        s["rules"] = list(self.processor.rules)
+        s["encoding_chars"] = {ch for ch, cb in self._encoding_checks.items() if cb.isChecked()}
+
+    def _load_set_state(self, idx: int) -> None:
+        """Restore UI fields from the state dict for set idx."""
+        s = self._set_states[idx]
+        self.type_combo.setCurrentIndex(s["type_idx"])
+        self.manual_text.setPlainText(s["manual_text"])
+        self._file_path = s["file_path"]
+        self.file_path_edit.setText(s["file_path"])
+        self.num_start.setValue(s["num_start"])
+        self.num_end.setValue(s["num_end"])
+        self.num_step.setValue(s["num_step"])
+        self.num_min_int.setValue(s["num_min_int"])
+        self.num_max_int.setValue(s["num_max_int"])
+        self.num_min_frac.setValue(s["num_min_frac"])
+        self.num_max_frac.setValue(s["num_max_frac"])
+        self.num_sequential_radio.setChecked(s["num_sequential"])
+        self.num_random_radio.setChecked(not s["num_sequential"])
+        self.num_decimal_radio.setChecked(s["num_decimal"])
+        self.num_hex_radio.setChecked(not s["num_decimal"])
+        self.brute_charset.setText(s["brute_charset"])
+        self.brute_min.setValue(s["brute_min"])
+        self.brute_max.setValue(s["brute_max"])
+        self.null_count.setValue(s["null_count"])
+        self.filter_check.setChecked(s["filter_check"])
+        self.filter_min.setValue(s["filter_min"])
+        self.filter_max.setValue(s["filter_max"])
+        self.repeat_count.setValue(s["repeat_count"])
+        self.order_sequential_radio.setChecked(s["order_sequential"])
+        self.order_random_radio.setChecked(not s["order_sequential"])
+        # Restore rules
+        self.processor.clear_rules()
+        for rule in s["rules"]:
+            self.processor.add_rule(rule)
+        self._refresh_rules_model()
+        # Restore encoding
+        for ch, cb in self._encoding_checks.items():
+            cb.setChecked(ch in s["encoding_chars"])
+
+    def _on_set_changed(self, new_idx: int) -> None:
+        """Save old set state, load new set state."""
+        self._save_set_state(self._current_set_idx)
+        self._current_set_idx = new_idx
+        self._load_set_state(new_idx)
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -552,6 +646,17 @@ class PayloadsTab(QWidget):
 
     def get_processor(self) -> PayloadProcessor:
         return self.processor
+
+    def get_payload_generator_for_set(self, set_idx: int, start_index: int = 0) -> Iterator[str]:
+        """Build generator from a specific set's saved state (for pitchfork/cluster_bomb)."""
+        # Save current UI, briefly switch to target set, build generator, switch back
+        self._save_set_state(self._current_set_idx)
+        saved_idx = self._current_set_idx
+        self._load_set_state(set_idx)
+        gen = self.get_payload_generator(start_index)
+        self._load_set_state(saved_idx)
+        self._current_set_idx = saved_idx
+        return gen
 
     def get_payload_generator(self, start_index: int = 0) -> Iterator[str]:
         """Build and return a payload generator based on current settings."""
