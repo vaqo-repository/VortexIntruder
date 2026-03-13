@@ -99,11 +99,13 @@ class _StepWidget(QWidget):
         hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.ext_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.ext_table.setMinimumHeight(80)
         ext_layout.addWidget(self.ext_table)
         splitter.addWidget(ext_group)
 
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 1)
+        splitter.setSizes([320, 180])
         layout.addWidget(splitter)
 
     # -- extraction table helpers --
@@ -260,6 +262,7 @@ class _MacroEditor(QWidget):
 
         editor_splitter.setStretchFactor(0, 4)
         editor_splitter.setStretchFactor(1, 1)
+        editor_splitter.setSizes([480, 140])
         layout.addWidget(editor_splitter, 1)
 
         # Start with one empty step
