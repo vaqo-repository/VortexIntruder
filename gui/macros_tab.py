@@ -85,12 +85,12 @@ class _StepWidget(QWidget):
         ext_layout.setSpacing(4)
 
         ext_header = QHBoxLayout()
-        ext_header.addWidget(QLabel("Extracted values → available as {{name}} in later steps and in the fuzz request."))
+        ext_header.addWidget(QLabel("Extracted values -> available as {{name}} in later steps and in the fuzz request."))
         ext_header.addStretch()
         self.add_ext_btn = QPushButton("+ Add")
         self.add_ext_btn.setFixedWidth(60)
         self.add_ext_btn.clicked.connect(self._add_row)
-        self.del_ext_btn = QPushButton("− Del")
+        self.del_ext_btn = QPushButton("- Del")
         self.del_ext_btn.setFixedWidth(60)
         self.del_ext_btn.clicked.connect(self._del_row)
         ext_header.addWidget(self.add_ext_btn)
@@ -219,7 +219,7 @@ class _MacroEditor(QWidget):
         self.add_step_btn = QPushButton("+")
         self.add_step_btn.setToolTip("Add step")
         self.add_step_btn.clicked.connect(self._add_step)
-        self.del_step_btn = QPushButton("−")
+        self.del_step_btn = QPushButton("-")
         self.del_step_btn.setToolTip("Delete step")
         self.del_step_btn.clicked.connect(self._del_step)
         step_btn_row.addWidget(self.add_step_btn)
@@ -391,7 +391,7 @@ class MacrosTab(QWidget):
         btn_row = QHBoxLayout()
         self.add_btn = QPushButton("+ Add")
         self.add_btn.clicked.connect(self._add_macro)
-        self.del_btn = QPushButton("− Del")
+        self.del_btn = QPushButton("- Del")
         self.del_btn.clicked.connect(self._del_macro)
         btn_row.addWidget(self.add_btn)
         btn_row.addWidget(self.del_btn)
@@ -414,8 +414,8 @@ class MacrosTab(QWidget):
         empty = QLabel(
             "No macros yet.\n\nClick \"+ Add\" to create a macro.\n\n"
             "Example use case:\n"
-            "  Step 1: GET /login → extract CSRF token\n"
-            "  Step 2: POST /login → extract session cookie\n\n"
+            "  Step 1: GET /login -> extract CSRF token\n"
+            "  Step 2: POST /login -> extract session cookie\n\n"
             "Then use {{session}} in your fuzz request headers."
         )
         empty.setAlignment(Qt.AlignmentFlag.AlignCenter)

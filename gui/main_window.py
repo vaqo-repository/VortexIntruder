@@ -47,7 +47,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("VortexIntruder v1.0 – HTTP Fuzzer  |  by Vaqo")
+        self.setWindowTitle("VortexIntruder v1.0 - HTTP Fuzzer  |  by Vaqo")
         self.setMinimumSize(1100, 750)
         self.resize(1300, 850)
 
@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
 
         # Title bar
         title_row = QHBoxLayout()
-        title_lbl = QLabel("⚡ VortexIntruder v1.0")
+        title_lbl = QLabel("VortexIntruder v1.0")
         title_lbl.setObjectName("titleLabel")
         title_row.addWidget(title_lbl)
         title_row.addStretch()
@@ -82,7 +82,7 @@ class MainWindow(QMainWindow):
         title_row.addWidget(theme_label)
 
         self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["🌙 Dark", "☀️ Light"])
+        self.theme_combo.addItems(["Dark", "Light"])
         self.theme_combo.setFixedWidth(120)
         self.theme_combo.setCurrentIndex(0)
         self.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
@@ -96,15 +96,15 @@ class MainWindow(QMainWindow):
         title_row.addWidget(author_lbl)
 
         # Control buttons
-        self.start_btn = QPushButton("▶  Start Attack")
+        self.start_btn = QPushButton("Start Attack")
         self.start_btn.setObjectName("startButton")
         self.start_btn.clicked.connect(self._start_attack)
 
-        self.pause_btn = QPushButton("⏸  Pause")
+        self.pause_btn = QPushButton("Pause")
         self.pause_btn.setEnabled(False)
         self.pause_btn.clicked.connect(self._toggle_pause)
 
-        self.stop_btn = QPushButton("⏹  Stop")
+        self.stop_btn = QPushButton("Stop")
         self.stop_btn.setObjectName("stopButton")
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self._stop_attack)
@@ -124,12 +124,12 @@ class MainWindow(QMainWindow):
         self.results_tab = ResultsTab()
         self.logger_tab = LoggerTab()
 
-        self.tabs.addTab(self.request_tab, "🎯 Target & Request")
-        self.tabs.addTab(self.payloads_tab, "📦 Payloads")
-        self.tabs.addTab(self.settings_tab, "⚙️ Settings")
-        self.tabs.addTab(self.macros_tab, "🔁 Macros")
-        self.tabs.addTab(self.results_tab, "📊 Results")
-        self.tabs.addTab(self.logger_tab, "📋 Logger")
+        self.tabs.addTab(self.request_tab, "Target & Request")
+        self.tabs.addTab(self.payloads_tab, "Payloads")
+        self.tabs.addTab(self.settings_tab, "Settings")
+        self.tabs.addTab(self.macros_tab, "Macros")
+        self.tabs.addTab(self.results_tab, "Results")
+        self.tabs.addTab(self.logger_tab, "Logger")
 
         main_layout.addWidget(self.tabs, 1)
 
@@ -270,11 +270,11 @@ class MainWindow(QMainWindow):
             return
         if self._engine.is_paused:
             self._engine.resume()
-            self.pause_btn.setText("⏸  Pause")
+            self.pause_btn.setText("Pause")
             self._status_bar.showMessage("Attack running...")
         else:
             self._engine.pause()
-            self.pause_btn.setText("▶  Resume")
+            self.pause_btn.setText("Resume")
             self._status_bar.showMessage("Attack paused")
 
     def _stop_attack(self) -> None:
@@ -285,7 +285,7 @@ class MainWindow(QMainWindow):
     def _on_attack_finished(self) -> None:
         self.start_btn.setEnabled(True)
         self.pause_btn.setEnabled(False)
-        self.pause_btn.setText("⏸  Pause")
+        self.pause_btn.setText("Pause")
         self.stop_btn.setEnabled(False)
         self._status_bar.showMessage(
             f"Attack complete  |  Last index: {self._last_session_index}"
