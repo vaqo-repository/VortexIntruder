@@ -37,6 +37,7 @@ from gui.diff_dialog import DiffDialog
 from gui.logger_tab import LoggerTab
 from gui.macros_tab import MacrosTab
 from gui.payloads_tab import PayloadsTab
+from gui.repeater_tab import RepeaterTab
 from gui.request_tab import RequestTab
 from gui.results_tab import ResultsTab
 from gui.settings_tab import SettingsTab
@@ -130,6 +131,7 @@ class MainWindow(QMainWindow):
         self.payloads_tab = PayloadsTab()
         self.settings_tab = SettingsTab()
         self.macros_tab = MacrosTab()
+        self.repeater_tab = RepeaterTab()
         self.results_tab = ResultsTab()
         self.logger_tab = LoggerTab()
 
@@ -137,6 +139,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.payloads_tab, "Payloads")
         self.tabs.addTab(self.settings_tab, "Settings")
         self.tabs.addTab(self.macros_tab, "Macros")
+        self.tabs.addTab(self.repeater_tab, "Repeater")
         self.tabs.addTab(self.results_tab, "Results")
         self.tabs.addTab(self.logger_tab, "Logger")
 
@@ -150,6 +153,9 @@ class MainWindow(QMainWindow):
         # Results tab inter-tab signals
         self.results_tab.send_to_request.connect(self._on_send_to_request)
         self.results_tab.compare_responses.connect(self._on_compare_responses)
+        self.results_tab.send_to_repeater.connect(self._on_send_to_repeater)
+        # Repeater → Intruder
+        self.repeater_tab.send_to_intruder.connect(self._on_send_to_request_with_target)
 
     # -------------------------------------------------------------- THEME
 
@@ -312,6 +318,16 @@ class MainWindow(QMainWindow):
     def _on_send_to_request(self, raw_text: str) -> None:
         self.request_tab.set_raw_request(raw_text)
         self.tabs.setCurrentWidget(self.request_tab)
+
+    def _on_send_to_request_with_target(self, raw_text: str, target: str) -> None:
+        self.request_tab.set_raw_request(raw_text)
+        if target:
+            self.request_tab.set_target(target)
+        self.tabs.setCurrentWidget(self.request_tab)
+
+    def _on_send_to_repeater(self, raw_text: str) -> None:
+        self.repeater_tab.add_request(raw_text)
+        self.tabs.setCurrentWidget(self.repeater_tab)
 
     def _on_compare_responses(self, body1: str, body2: str) -> None:
         dlg = DiffDialog(body1, body2, self)

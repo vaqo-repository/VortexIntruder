@@ -40,6 +40,7 @@ class ResultsTab(QWidget):
     """Results display tab with filtering and export."""
 
     send_to_request = pyqtSignal(str)  # raw request text for re-fuzzing
+    send_to_repeater = pyqtSignal(str)  # raw request text for repeater
     compare_responses = pyqtSignal(str, str)  # two response bodies for diff
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -245,6 +246,10 @@ class ResultsTab(QWidget):
         send_action.triggered.connect(self._send_selected_to_request)
         menu.addAction(send_action)
 
+        repeater_action = QAction("Send to Repeater", self)
+        repeater_action.triggered.connect(self._send_selected_to_repeater)
+        menu.addAction(repeater_action)
+
         diff_action = QAction("Compare Selected Responses (Diff)", self)
         diff_action.triggered.connect(self._diff_selected)
         menu.addAction(diff_action)
@@ -259,6 +264,11 @@ class ResultsTab(QWidget):
         row = self.table.currentRow()
         if 0 <= row < len(self._results):
             self.send_to_request.emit(self._results[row].request_text)
+
+    def _send_selected_to_repeater(self) -> None:
+        row = self.table.currentRow()
+        if 0 <= row < len(self._results):
+            self.send_to_repeater.emit(self._results[row].request_text)
 
     def _diff_selected(self) -> None:
         rows = sorted(set(idx.row() for idx in self.table.selectedIndexes()))
