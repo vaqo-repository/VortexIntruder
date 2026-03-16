@@ -246,6 +246,51 @@ class SettingsTab(QWidget):
 
         layout.addWidget(throttle_group)
 
+        # -- IP Rotation / Anti-Ban --
+        ip_group = QGroupBox("IP Rotation / Anti-Ban Headers")
+        ip_layout = QVBoxLayout(ip_group)
+        ip_layout.setContentsMargins(10, 8, 10, 8)
+        ip_layout.setSpacing(6)
+
+        self.ip_rotate_check = QCheckBox("Enable auto IP rotation (random IP per request)")
+        self.ip_rotate_check.setToolTip(
+            "Automatically inject spoofed IP headers with a random IP address on each request.\n"
+            "This can help bypass IP-based rate limiting on misconfigured WAFs/proxies."
+        )
+        ip_layout.addWidget(self.ip_rotate_check)
+
+        ip_layout.addWidget(QLabel("Headers to inject (check the ones you want):"))
+
+        self._ip_header_checks: dict[str, QCheckBox] = {}
+        _ip_headers = [
+            ("X-Forwarded-For", True),
+            ("X-Real-IP", True),
+            ("X-Originating-IP", False),
+            ("X-Remote-IP", False),
+            ("X-Remote-Addr", False),
+            ("X-Client-IP", False),
+            ("CF-Connecting-IP", False),
+            ("True-Client-IP", False),
+            ("Forwarded", False),
+            ("X-Forwarded-Host", False),
+        ]
+        row1 = QHBoxLayout()
+        row2 = QHBoxLayout()
+        for i, (name, default_on) in enumerate(_ip_headers):
+            cb = QCheckBox(name)
+            cb.setChecked(default_on)
+            self._ip_header_checks[name] = cb
+            if i < 5:
+                row1.addWidget(cb)
+            else:
+                row2.addWidget(cb)
+        row1.addStretch()
+        row2.addStretch()
+        ip_layout.addLayout(row1)
+        ip_layout.addLayout(row2)
+
+        layout.addWidget(ip_group)
+
         layout.addStretch()
 
         scroll.setWidget(container)
@@ -333,6 +378,12 @@ class SettingsTab(QWidget):
     def get_interleave_follow_redirects(self) -> bool:
         return self.interleave_follow_redirects.isChecked()
 
+    def get_auto_ip_rotate(self) -> bool:
+        return self.ip_rotate_check.isChecked()
+
+    def get_ip_rotate_headers(self) -> list[str]:
+        return [name for name, cb in self._ip_header_checks.items() if cb.isChecked()]
+
     def get_data(self) -> dict:
         return {
             "attack_type": self.get_attack_type(),
@@ -357,6 +408,8 @@ class SettingsTab(QWidget):
             "interleave_every": self.interleave_every_spin.value(),
             "interleave_request": self.interleave_request_edit.toPlainText(),
             "interleave_follow_redirects": self.interleave_follow_redirects.isChecked(),
+            "auto_ip_rotate": self.ip_rotate_check.isChecked(),
+            "ip_rotate_headers": {name: cb.isChecked() for name, cb in self._ip_header_checks.items()},
         }
 
     def set_data(self, data: dict) -> None:
@@ -387,3 +440,9 @@ class SettingsTab(QWidget):
         self.interleave_every_spin.setValue(data.get("interleave_every", 3))
         self.interleave_request_edit.setPlainText(data.get("interleave_request", ""))
         self.interleave_follow_redirects.setChecked(data.get("interleave_follow_redirects", True))
+        self.ip_rotate_check.setChecked(data.get("auto_ip_rotate", False))
+        ip_hdrs = data.get("ip_rotate_headers", {})
+        if isinstance(ip_hdrs, dict):
+            for name, cb in self._ip_header_checks.items():
+                if name in ip_hdrs:
+                    cb.setChecked(ip_hdrs[name])

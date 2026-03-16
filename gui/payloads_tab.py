@@ -43,6 +43,12 @@ from engine.processor import (
     RuleType,
     TransportEncoder,
 )
+from engine.wordlists import (
+    BUILTIN_WORDLISTS,
+    builtin_wordlist_generator,
+    get_wordlist_names,
+    get_wordlist_info,
+)
 
 
 PAYLOAD_TYPES = [
@@ -51,6 +57,7 @@ PAYLOAD_TYPES = [
     "Brute-forcer",
     "Null Payloads",
     "File Wordlist",
+    "Built-in Wordlists",
 ]
 
 
@@ -106,6 +113,7 @@ class PayloadsTab(QWidget):
             "repeat_count": 1, "order_sequential": True,
             "rules": [],
             "encoding_chars": set(),
+            "builtin_name": get_wordlist_names()[0] if get_wordlist_names() else "",
         }
 
     def _save_set_state(self, idx: int) -> None:
@@ -134,6 +142,7 @@ class PayloadsTab(QWidget):
         s["order_sequential"] = self.order_sequential_radio.isChecked()
         s["rules"] = list(self.processor.rules)
         s["encoding_chars"] = {ch for ch, cb in self._encoding_checks.items() if cb.isChecked()}
+        s["builtin_name"] = self.builtin_combo.currentText()
 
     def _load_set_state(self, idx: int) -> None:
         """Restore UI fields from the state dict for set idx."""
@@ -168,6 +177,10 @@ class PayloadsTab(QWidget):
         for rule in s["rules"]:
             self.processor.add_rule(rule)
         self._refresh_rules_model()
+        # Restore built-in wordlist selection
+        bidx = self.builtin_combo.findText(s.get("builtin_name", ""))
+        if bidx >= 0:
+            self.builtin_combo.setCurrentIndex(bidx)
         # Restore encoding
         for ch, cb in self._encoding_checks.items():
             cb.setChecked(ch in s["encoding_chars"])
@@ -393,6 +406,32 @@ class PayloadsTab(QWidget):
         self.null_group.setVisible(False)
         source_layout.addWidget(self.null_group)
 
+        # -- Built-in Wordlists --
+        self.builtin_group = QGroupBox("Built-in Wordlists")
+        builtin_layout = QVBoxLayout(self.builtin_group)
+        cat_row = QHBoxLayout()
+        cat_row.addWidget(QLabel("Category:"))
+        self.builtin_combo = QComboBox()
+        for name in get_wordlist_names():
+            count, desc = get_wordlist_info(name)
+            self.builtin_combo.addItem(f"{name}", name)
+        self.builtin_combo.currentIndexChanged.connect(self._on_builtin_changed)
+        cat_row.addWidget(self.builtin_combo, 1)
+        builtin_layout.addLayout(cat_row)
+        self.builtin_info_label = QLabel()
+        self.builtin_info_label.setStyleSheet(
+            "color: #4ecca3; font-family: Consolas; font-size: 12px;"
+        )
+        builtin_layout.addWidget(self.builtin_info_label)
+        self.builtin_preview = QPlainTextEdit()
+        self.builtin_preview.setReadOnly(True)
+        self.builtin_preview.setMaximumHeight(120)
+        self.builtin_preview.setPlaceholderText("Preview of first payloads...")
+        builtin_layout.addWidget(self.builtin_preview)
+        self.builtin_group.setVisible(False)
+        source_layout.addWidget(self.builtin_group)
+        self._on_builtin_changed()
+
         # Length filter
         filter_row = QHBoxLayout()
         self.filter_check = QCheckBox("Filter by Length")
@@ -555,12 +594,24 @@ class PayloadsTab(QWidget):
         except Exception:
             self.num_preview_label.setText("—")
 
+    def _on_builtin_changed(self, _idx: int = 0) -> None:
+        name = self.builtin_combo.currentData()
+        if name and name in BUILTIN_WORDLISTS:
+            count, desc = get_wordlist_info(name)
+            self.builtin_info_label.setText(f"{desc}  ({count} payloads)")
+            payloads = BUILTIN_WORDLISTS[name][0]
+            preview = "\n".join(payloads[:15])
+            if len(payloads) > 15:
+                preview += f"\n... ({len(payloads) - 15} more)"
+            self.builtin_preview.setPlainText(preview)
+
     def _on_type_changed(self, idx: int) -> None:
         self.manual_group.setVisible(idx == 0)
         self.numbers_group.setVisible(idx == 1)
         self.brute_group.setVisible(idx == 2)
         self.null_group.setVisible(idx == 3)
         self.file_group.setVisible(idx == 4)
+        self.builtin_group.setVisible(idx == 5)
 
     def _on_rule_type_changed(self, idx: int) -> None:
         rt = ALL_RULE_TYPES[idx]
@@ -693,6 +744,13 @@ class PayloadsTab(QWidget):
         elif idx == 4:
             # File wordlist
             gen = wordlist_generator(self._file_path, start_index)
+        elif idx == 5:
+            # Built-in wordlists
+            name = self.builtin_combo.currentData()
+            if name and name in BUILTIN_WORDLISTS:
+                gen = builtin_wordlist_generator(name)
+            else:
+                gen = manual_list_generator([])
         else:
             gen = manual_list_generator([])
 
@@ -740,6 +798,12 @@ class PayloadsTab(QWidget):
                     base = 0
             else:
                 base = 0
+        elif idx == 5:
+            name = self.builtin_combo.currentData()
+            if name and name in BUILTIN_WORDLISTS:
+                base = len(BUILTIN_WORDLISTS[name][0])
+            else:
+                base = 0
         else:
             base = 0
         return base * self.repeat_count.value()
@@ -776,6 +840,7 @@ class PayloadsTab(QWidget):
                     for r in s["rules"]
                 ],
                 "encoding_chars": sorted(s["encoding_chars"]),
+                "builtin_name": s.get("builtin_name", ""),
             })
         return {"current_set": self._current_set_idx, "sets": sets}
 
@@ -813,6 +878,7 @@ class PayloadsTab(QWidget):
                 "order_sequential": sd.get("order_sequential", True),
                 "rules": rules,
                 "encoding_chars": set(sd.get("encoding_chars", [])),
+                "builtin_name": sd.get("builtin_name", get_wordlist_names()[0] if get_wordlist_names() else ""),
             }
         cur = data.get("current_set", 0)
         self.set_combo.setCurrentIndex(cur)

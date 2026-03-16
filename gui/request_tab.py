@@ -28,6 +28,10 @@ from PyQt6.QtWidgets import (
 
 from engine.parser import MARKER, guess_target_from_raw
 
+_PARAM_VALUE_RE = re.compile(r"([^&=]+)=([^&]*)")
+_JSON_VALUE_RE = re.compile(r'("(?:[^"\\]|\\.)*")\s*:\s*("(?:[^"\\]|\\.)*"|\d+(?:\.\d+)?|true|false|null)')
+_COOKIE_RE = re.compile(r"([^;=\s]+)=([^;]*)")
+
 
 # ---------------------------------------------------------------------------
 # Syntax Highlighter for HTTP requests
@@ -150,6 +154,13 @@ class RequestTab(QWidget):
         self.auto_detect_btn = QPushButton("Auto-Detect Target")
         self.auto_detect_btn.clicked.connect(self._auto_detect_target)
 
+        self.auto_positions_btn = QPushButton("Auto §")
+        self.auto_positions_btn.setObjectName("markerButton")
+        self.auto_positions_btn.setToolTip(
+            "Auto-detect parameters (URL query, body, cookies, JSON) and wrap values with § markers"
+        )
+        self.auto_positions_btn.clicked.connect(self._auto_detect_positions)
+
         self.position_count_label = QLabel("Positions: 0")
         self.position_count_label.setObjectName("statsLabel")
 
@@ -157,6 +168,7 @@ class RequestTab(QWidget):
         btn_bar.addWidget(self.add_marker_btn)
         btn_bar.addWidget(self.clear_marker_btn)
         btn_bar.addWidget(self.auto_detect_btn)
+        btn_bar.addWidget(self.auto_positions_btn)
         btn_bar.addStretch()
         btn_bar.addWidget(self.position_count_label)
         editor_layout.addLayout(btn_bar)
@@ -235,6 +247,80 @@ class RequestTab(QWidget):
         host = guess_target_from_raw(raw)
         if host:
             self.target_input.setText(host)
+
+    def _auto_detect_positions(self) -> None:
+        """Auto-detect parameter values in URL query, body, cookies, and JSON and wrap with § markers."""
+        raw = self.editor.toPlainText()
+        # Remove existing markers first
+        raw = raw.replace(MARKER, "")
+
+        # Split request into head (request line + headers) and body
+        if "\n\n" in raw:
+            head, body = raw.split("\n\n", 1)
+        elif "\r\n\r\n" in raw:
+            head, body = raw.split("\r\n\r\n", 1)
+        else:
+            head = raw
+            body = ""
+
+        lines = head.split("\n")
+        result_lines = []
+
+        for i, line in enumerate(lines):
+            if i == 0:
+                # Request line: GET /path?key=val&key2=val2 HTTP/1.1
+                m = re.match(r'^(\S+\s+)([^\s]+)(\s+HTTP/\S+)?$', line.rstrip('\r'), re.IGNORECASE)
+                if m:
+                    method_part, path, proto = m.group(1), m.group(2), m.group(3) or ""
+                    if "?" in path:
+                        base_path, query = path.split("?", 1)
+                        new_query = _PARAM_VALUE_RE.sub(
+                            lambda pm: f"{pm.group(1)}={MARKER}{pm.group(2)}{MARKER}", query
+                        )
+                        result_lines.append(f"{method_part}{base_path}?{new_query}{proto}")
+                    else:
+                        result_lines.append(line)
+                else:
+                    result_lines.append(line)
+            else:
+                # Headers — handle Cookie header
+                stripped = line.rstrip('\r')
+                if stripped.lower().startswith("cookie:"):
+                    prefix = stripped[:stripped.index(":") + 1]
+                    cookie_val = stripped[len(prefix):].strip()
+                    new_cookie = _COOKIE_RE.sub(
+                        lambda cm: f"{cm.group(1)}={MARKER}{cm.group(2)}{MARKER}", cookie_val
+                    )
+                    result_lines.append(f"{prefix} {new_cookie}")
+                else:
+                    result_lines.append(line)
+
+        new_head = "\n".join(result_lines)
+
+        # Process body
+        new_body = body
+        if body.strip():
+            stripped_body = body.strip()
+            if stripped_body.startswith("{") or stripped_body.startswith("["):
+                # JSON body — wrap values
+                new_body = _JSON_VALUE_RE.sub(
+                    lambda jm: f"{jm.group(1)}: {MARKER}{jm.group(2)}{MARKER}", body
+                )
+            else:
+                # Form-encoded body — wrap values
+                new_body = _PARAM_VALUE_RE.sub(
+                    lambda pm: f"{pm.group(1)}={MARKER}{pm.group(2)}{MARKER}", body
+                )
+
+        # Reassemble
+        sep = "\r\n\r\n" if "\r\n\r\n" in raw or "\r\n" in head else "\n\n"
+        if body or raw.endswith("\n\n") or raw.endswith("\r\n\r\n"):
+            result = new_head + sep + new_body
+        else:
+            result = new_head
+
+        self.editor.setPlainText(result)
+        self._update_position_count()
 
     def _update_position_count(self) -> None:
         text = self.editor.toPlainText()

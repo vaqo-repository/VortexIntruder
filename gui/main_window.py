@@ -37,6 +37,7 @@ from gui.diff_dialog import DiffDialog
 from gui.logger_tab import LoggerTab
 from gui.macros_tab import MacrosTab
 from gui.payloads_tab import PayloadsTab
+from gui.proxy_tab import ProxyTab
 from gui.repeater_tab import RepeaterTab
 from gui.request_tab import RequestTab
 from gui.results_tab import ResultsTab
@@ -134,6 +135,7 @@ class MainWindow(QMainWindow):
         self.repeater_tab = RepeaterTab()
         self.results_tab = ResultsTab()
         self.logger_tab = LoggerTab()
+        self.proxy_tab = ProxyTab()
 
         self.tabs.addTab(self.request_tab, "Target & Request")
         self.tabs.addTab(self.payloads_tab, "Payloads")
@@ -142,6 +144,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.repeater_tab, "Repeater")
         self.tabs.addTab(self.results_tab, "Results")
         self.tabs.addTab(self.logger_tab, "Logger")
+        self.tabs.addTab(self.proxy_tab, "HTTP Proxy")
 
         main_layout.addWidget(self.tabs, 1)
 
@@ -156,6 +159,8 @@ class MainWindow(QMainWindow):
         self.results_tab.send_to_repeater.connect(self._on_send_to_repeater)
         # Repeater → Intruder
         self.repeater_tab.send_to_intruder.connect(self._on_send_to_request_with_target)
+        # Proxy → Repeater
+        self.proxy_tab.send_to_repeater.connect(self._on_send_to_repeater)
 
     # -------------------------------------------------------------- THEME
 
@@ -213,6 +218,8 @@ class MainWindow(QMainWindow):
             interleave_request=self.settings_tab.get_interleave_request(),
             interleave_follow_redirects=self.settings_tab.get_interleave_follow_redirects(),
             macros=self.macros_tab.get_macro_configs(),
+            auto_ip_rotate=self.settings_tab.get_auto_ip_rotate(),
+            ip_rotate_headers=self.settings_tab.get_ip_rotate_headers(),
         )
 
         # Build payload iterator based on attack type
@@ -397,4 +404,5 @@ class MainWindow(QMainWindow):
                 return
             self._engine.stop()
             self._engine.wait(3000)
+        self.proxy_tab.cleanup()
         event.accept()

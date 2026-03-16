@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import json
+import random
 import re
 import ssl
 import time
@@ -110,6 +111,9 @@ class AttackConfig:
     auto_pause_errors: bool = False  # pause when N consecutive errors occur
     auto_pause_threshold: int = 5    # N consecutive errors before auto-pause
     macros: list[MacroConfig] = field(default_factory=list)
+    # IP rotation
+    auto_ip_rotate: bool = False
+    ip_rotate_headers: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +262,6 @@ class FuzzerEngine(QThread):
 
                 # -- Delay + Jitter --
                 if self.config.delay_ms > 0 or self.config.jitter_ms > 0:
-                    import random
                     delay = self.config.delay_ms
                     if self.config.jitter_ms > 0:
                         delay += random.uniform(-self.config.jitter_ms, self.config.jitter_ms)
@@ -503,11 +506,16 @@ class FuzzerEngine(QThread):
 
         # Parse the filled request
         parsed = parse_raw_request(raw_filled, self.config.target_override)
-        result.request_text = raw_filled
 
         # Connection header override
         if self.config.connection_header:
             parsed.headers["Connection"] = self.config.connection_header
+
+        # IP rotation headers
+        if self.config.auto_ip_rotate and self.config.ip_rotate_headers:
+            fake_ip = f"{random.randint(1,254)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}"
+            for hdr_name in self.config.ip_rotate_headers:
+                parsed.headers[hdr_name] = fake_ip
 
         # Cookie handling
         if self.config.cookie_handling == "update" and cookie_jar:
@@ -520,6 +528,14 @@ class FuzzerEngine(QThread):
         # Update Content-Length
         if self.config.update_content_length:
             parsed.headers = update_content_length(parsed.headers, parsed.body)
+
+        # Build final request text for display (includes injected headers)
+        header_lines = f"{parsed.method} {parsed.path} HTTP/1.1"
+        for hk, hv in parsed.headers.items():
+            header_lines += f"\r\n{hk}: {hv}"
+        if parsed.body:
+            header_lines += f"\r\n\r\n{parsed.body}"
+        result.request_text = header_lines
 
         # Send
         t0 = time.monotonic()
