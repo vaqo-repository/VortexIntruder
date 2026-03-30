@@ -37,6 +37,7 @@ from gui.diff_dialog import DiffDialog
 from gui.logger_tab import LoggerTab
 from gui.macros_tab import MacrosTab
 from gui.payloads_tab import PayloadsTab
+from gui.advanced_tools_tab import AdvancedToolsTab
 from gui.proxy_tab import ProxyTab
 from gui.repeater_tab import RepeaterTab
 from gui.request_tab import RequestTab
@@ -136,6 +137,7 @@ class MainWindow(QMainWindow):
         self.results_tab = ResultsTab()
         self.logger_tab = LoggerTab()
         self.proxy_tab = ProxyTab()
+        self.advanced_tools_tab = AdvancedToolsTab()
 
         self.tabs.addTab(self.request_tab, "Target & Request")
         self.tabs.addTab(self.payloads_tab, "Payloads")
@@ -145,6 +147,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.results_tab, "Results")
         self.tabs.addTab(self.logger_tab, "Logger")
         self.tabs.addTab(self.proxy_tab, "HTTP Proxy")
+        self.tabs.addTab(self.advanced_tools_tab, "Advanced Tools")
 
         main_layout.addWidget(self.tabs, 1)
 

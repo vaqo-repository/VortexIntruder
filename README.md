@@ -1,4 +1,4 @@
-﻿#  VortexIntruder v1.4
+﻿#  VortexIntruder v1.5
 
 **Professional HTTP Fuzzer with PyQt6 GUI  inspired by Burp Suite Intruder**
 
@@ -126,6 +126,16 @@ With this config, VortexIntruder sends: `fuzz  fuzz  GET /home  fuzz  fuzz  GET 
 - Captures and displays proxied HTTP traffic in real time
 - Send intercepted requests directly to Intruder
 
+###  Advanced Tools (Docker Sandbox)
+- **SQLMap** integration — runs inside an isolated Docker container
+- Full sandbox isolation: read-only root FS, all capabilities dropped, no host filesystem access, memory-limited (512MB), single CPU
+- GUI with presets: Basic Detection, Full Auto, Database Enumeration, WAF Bypass, POST Form, Cookie Injection, Time-Based Blind, OS Shell
+- Quick toggles for --batch, --random-agent, --dbs, --forms, --crawl, --threads
+- Level/Risk selectors, tamper script input, custom flags
+- Live streaming output console
+- One-click sandbox image build (auto-downloads SQLMap from GitHub)
+- Requires Docker Desktop (auto-detected on startup)
+
 ###  Themes
 - **Dark**  professional dark gray theme
 - **Light**  clean light theme
@@ -239,6 +249,7 @@ VortexIntruder/
     processor.py        # Payload processing pipeline (18 rule types)
     fuzzer.py           # Async fuzzer engine (QThread + httpx) + IP rotation
     wordlists.py        # 3700+ built-in payloads (SQLi, XSS, SSTI, etc.)
+    sandbox.py          # Docker sandbox manager for isolated tool execution
  gui/
      styles.py           # Dark & Light QSS themes
      request_tab.py      # Request editor with syntax highlighting & auto-position detect
@@ -248,12 +259,19 @@ VortexIntruder/
      logger_tab.py       # Filtered log viewer
      diff_dialog.py      # Response diff dialog
      proxy_tab.py        # Burp Suite proxy integration
+     advanced_tools_tab.py # SQLMap & other tools (Docker sandbox)
      main_window.py      # Main window & attack orchestration
 ```
 
 ---
 
 ##  Changelog
+
+### v1.5
+- Added **Advanced Tools** tab with **SQLMap** running inside Docker sandbox
+- Full container isolation: read-only FS, dropped capabilities, no host access, memory/CPU limits
+- 9 SQLMap presets (Basic Detection, Full Auto, WAF Bypass, DB Enum, etc.)
+- Live output streaming, one-click sandbox image build
 
 ### v1.4
 - Added **Proxy Tab** with Burp Suite auto-detection and live traffic capture

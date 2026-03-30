@@ -11,6 +11,7 @@ import json
 import socket
 import ssl
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -695,11 +696,16 @@ class ProxyTab(QWidget):
         port = self._port_edit.text().strip() or "8888"
 
         try:
+            popen_kwargs = {}
+            if sys.platform == "win32":
+                popen_kwargs["creationflags"] = (
+                    subprocess.DETACHED_PROCESS
+                    | subprocess.CREATE_NEW_PROCESS_GROUP
+                    | subprocess.CREATE_NO_WINDOW
+                )
             subprocess.Popen(
                 [self._burp_path],
-                creationflags=subprocess.DETACHED_PROCESS
-                    | subprocess.CREATE_NEW_PROCESS_GROUP
-                    | subprocess.CREATE_NO_WINDOW,
+                **popen_kwargs,
             )
             QMessageBox.information(
                 self, "Burp Suite Launched",
@@ -746,6 +752,13 @@ class ProxyTab(QWidget):
 
         if chrome:
             try:
+                popen_kwargs = {}
+                if sys.platform == "win32":
+                    popen_kwargs["creationflags"] = (
+                        subprocess.DETACHED_PROCESS
+                        | subprocess.CREATE_NEW_PROCESS_GROUP
+                        | subprocess.CREATE_NO_WINDOW
+                    )
                 subprocess.Popen(
                     [
                         chrome,
@@ -754,9 +767,7 @@ class ProxyTab(QWidget):
                         "--new-window",
                         "http://example.com",
                     ],
-                    creationflags=subprocess.DETACHED_PROCESS
-                        | subprocess.CREATE_NEW_PROCESS_GROUP
-                        | subprocess.CREATE_NO_WINDOW,
+                    **popen_kwargs,
                 )
                 return
             except Exception:

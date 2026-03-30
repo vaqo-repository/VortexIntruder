@@ -39,6 +39,9 @@ from __future__ import annotations
 
 import os
 import sys
+import warnings
+
+warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
 
 
 def check_dependencies() -> list[str]:
@@ -83,4 +86,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
     main()
